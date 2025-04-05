@@ -13,6 +13,7 @@ RUN python -m pip install --upgrade pip && \
 
 WORKDIR /app
 COPY . /app
+WORKDIR /app/src
 
 # During debugging, this entry point will be overridden. For more information, please refer to https://aka.ms/vscode-docker-python-debug
-CMD ["python", "-m", "src.botcoin.app"]
+CMD ["python", "-m", "app"]

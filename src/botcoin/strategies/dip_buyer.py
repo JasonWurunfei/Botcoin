@@ -7,7 +7,7 @@ class DipBuyerStrategy:
     A class to implement a dip buying strategy for stock trading.
     """
 
-    def __init__(self, threshold: int = 3, trade_amount: float = 0.1):
+    def __init__(self, threshold: int = 3, trade_amount: float = 0.1, stop_gain: float = 0.01):
         """
         Initialize the DipBuyer with a threshold for dip buying.
 
@@ -18,24 +18,51 @@ class DipBuyerStrategy:
         """
         self.threshold = threshold
         self.trade_amount = trade_amount
-        self.convertion_cost = SimpleTradeCost(cost_percentage=0.007)  # 0.5% trade cost
+        self.stop_gain = stop_gain
+        self.convertion_cost = SimpleTradeCost(cost_percentage=0.007)
 
-    def history_replay(self, ticker_data: pd.DataFrame):
+    def trade(self, balance: float, open: float, high: float, close: float) -> dict:
         """
-        Replay the historical data for a given ticker between start and end dates.
+        This simulates a trade. Assuming we buy at the open price and sell at close price or stop gain.
+        """
+        amount = balance * self.trade_amount
+        stop_gain = open * self.stop_gain
+        if high > stop_gain:
+            # Calculate profit/loss
+            delta = (high - open) / open
+        else:
+            # If stop gain is not reached, we sell at close price
+            delta = (close - open) / open
 
-        :param ticker_data: The historical data for the ticker.
-        :type ticker_data: pd.DataFrame
+        # Update balance with the profit/loss from the trade
+        balance += amount * delta
+
+        # Calculate the cost of the trade
+        cost: float = 0
+        cost += self.convertion_cost.calculate_cost(amount)
+        balance -= cost
+
+
+        is_winning = str((delta - self.convertion_cost.cost_percentage) > 0)
+        record = {
+            "trade_amount": amount,
+            "is_winning": is_winning,
+            "balance": balance,
+        }
+
+        return record
+    
+    def get_history_tradeable_records(self, ticker_data: pd.DataFrame) -> list[dict]:
         """
+        Get the historical tradeable records for a given ticker.
+        This function identifies the dips in the historical data based on the open and close prices.
+        """
+        records = []
 
         # Initialize variables for tracking dips
         curr: int = 0
         count: int = 0
         is_bought: bool = False
-
-        # Initialize starting balance and trade record
-        balance: float = 1
-        record: list = []
 
         # Iterate through the historical data to identify dips
         for _, row in ticker_data.iterrows():
@@ -49,33 +76,38 @@ class DipBuyerStrategy:
                 if count == self.threshold:
                     # buy logic here
                     is_bought = True
+
+                    # Execute trade and record the result
                     next_row = ticker_data.iloc[curr + 1]
-                    delta = (next_row["High"] - next_row["Open"]) / next_row["Open"]
-                    amount = balance * self.trade_amount
-                    balance -= amount # Deduct the trade amount from balance
-                    balance += amount * (1 + delta) # Update balance with the profit/loss from the trade
-
-                    # Calculate the cost of the trade
-                    cost: float = 0
-                    cost += self.convertion_cost.calculate_cost(amount) # Calculate the trade cost
-                    balance -= cost # Deduct the trade cost from balance
-
-                    # Record the trade details
-                    record.append(
-                        {
-                            "date": str(next_row.name.to_pydatetime()),
-                            "trade_amount": amount,
-                            "winning": str(delta > 0),
-                            "profit": delta,
-                            "balance": balance,
-                            "cost": cost,
-                        }
-                    )
+                    rec = next_row.to_dict()
+                    rec.update({'date': next_row.name})
+                    records.append(rec)
 
                 # Reset the count and start index
                 count = 0
 
             curr += 1
+           
+        return records
 
-        return balance, record
+    def history_replay(self, trades: list[dict]) -> tuple[float, list[dict], float]:
+        """
+        Replay the historical data for a given ticker between start and end dates.
 
+        :param trades: A list of dictionaries containing the historical data for the ticker.
+        :type trades: list[dict]
+        each dictionary should contain the keys "Open", "High", "Low", and "Close".
+        """
+
+        # Initialize starting balance and trade record
+        balance: float = 1
+        records: list = []
+
+        # Iterate through the historical data to identify dips
+        for rec in trades:
+            record = self.trade(balance, rec["Open"], rec["High"], rec["Close"])
+            balance = record["balance"]
+            records.append(record)
+
+        win_rate = len([x for x in records if x["is_winning"] == "True"]) / len(records) if records else 0
+        return balance, records, win_rate

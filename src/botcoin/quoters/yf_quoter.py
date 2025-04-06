@@ -13,6 +13,19 @@ class YFQuoter:
         return price
     
     @classmethod
+    def get_last_3_days_prices(cls, ticker: str) -> list:
+        """
+        Get the last 3 days of daily prices for a given ticker.
+        """
+        # Define the ticker (e.g., BTC-USD, ETH-USD, AAPL, etc.)
+        ticker = yf.Ticker(ticker)
+
+        # Fetch 3 days of daily candles
+        candles = ticker.history(period="3d", interval="1d")
+
+        return candles[["Open", "High", "Low", "Close"]]
+    
+    @classmethod
     def get_five_year_daily_prices(cls, ticker: str) -> list:
         """
         Get the last 5 years of daily prices for a given ticker.

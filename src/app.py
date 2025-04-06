@@ -4,10 +4,12 @@ from botcoin.strategies.dip_buyer import DipBuyerStrategy
 
 if __name__ == "__main__":
     # Initialize the strategy
-    strategy = DipBuyerStrategy(threshold=3, trade_amount=0.25, stop_gain=0.012)
+    strategy = DipBuyerStrategy(threshold=2, trade_amount=0.9, stop_gain=0.012)
 
     # Define the watchlist of tickers
     watchlist = [
+        'mstr',
+        'gme',
         'AAPL',
         'MSFT',
         'AMZN',
@@ -20,22 +22,30 @@ if __name__ == "__main__":
         'INTC'
     ]
 
-    all_trades = []
+    print("Watchlist:")
+    print(watchlist)
 
-    # Loop through each ticker in the watchlist
-    for ticker in watchlist:
-        # Fetch ticker information
-        ticker_info = yf.Ticker(ticker)
+    print("Dip Buyer Strategy:")
+    print("Threshold:", strategy.threshold)
+    print("Tradeable stocks:")
+    print(strategy.screening(watchlist))
 
-        # Fetch 2 years of daily candles
-        candles = ticker_info.history(period="2y", interval="1d")
-        prices = candles[["Open", "High", "Low", "Close"]]
+    # all_trades = []
 
-        # Replay the strategy on the historical data
-        trades = strategy.get_history_tradeable_records(prices)
-        all_trades.extend(trades)
+    # # Loop through each ticker in the watchlist
+    # for ticker in watchlist:
+    #     # Fetch ticker information
+    #     ticker_info = yf.Ticker(ticker)
+
+    #     # Fetch 2 years of daily candles
+    #     candles = ticker_info.history(period="2y", interval="1d")
+    #     prices = candles[["Open", "High", "Low", "Close"]]
+
+    #     # Replay the strategy on the historical data
+    #     trades = strategy.get_history_tradeable_records(prices)
+    #     all_trades.extend(trades)
     
     
-    all_trades.sort(key=lambda x: x['date'])
-    bal, records, win_rate = strategy.history_replay(all_trades)
-    print(f"Final balance: {bal}, win rate: {win_rate} of {len(records)} trades")
+    # all_trades.sort(key=lambda x: x['date'])
+    # bal, records, win_rate = strategy.history_replay(all_trades)
+    # print(f"Final balance: {bal}, win rate: {win_rate} of {len(records)} trades")

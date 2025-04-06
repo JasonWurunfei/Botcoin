@@ -1,5 +1,6 @@
 import pandas as pd
 from botcoin.cost.simple import SimpleTradeCost
+from botcoin.quoters.yf_quoter import YFQuoter
 
 
 class DipBuyerStrategy:
@@ -111,3 +112,35 @@ class DipBuyerStrategy:
 
         win_rate = len([x for x in records if x["is_winning"] == "True"]) / len(records) if records else 0
         return balance, records, win_rate
+    
+
+    def screening(self, watchlist: list[str]) -> list[str]:
+        """
+        Screen the watchlist for potential trades based on the dip buying strategy.
+
+        :param watchlist: A list of tickers to screen.
+        :type watchlist: list[str]
+        :return: A list of tickers that are in a dip.
+        """
+        tradeable_tickers = []
+
+        for ticker in watchlist:
+            # Fetch ticker information
+            ticker_info = YFQuoter.get_last_3_days_prices(ticker)
+            today = ticker_info.iloc[-1]
+            yesterday = ticker_info.iloc[-2]
+            day_before_yesterday = ticker_info.iloc[-3]
+
+            for i in range(1, self.threshold + 1):
+                if ticker_info.iloc[-i]["Open"] < ticker_info.iloc[-i]["Close"]:
+                    # If the price is increasing, break the loop
+                    break
+                if i == self.threshold:
+                    # If we have reached the threshold, add the ticker to the list
+                    tradeable_tickers.append(ticker)
+                    break
+
+        return tradeable_tickers
+
+                
+               

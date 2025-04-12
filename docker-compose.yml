@@ -1,0 +1,6 @@
+services:
+  botcoin:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: botcoin

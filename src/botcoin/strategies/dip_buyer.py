@@ -1,5 +1,5 @@
 import pandas as pd
-from botcoin.cost.simple import SimpleTradeCost
+from botcoin.cost.trade import SimpleTradeCost
 from botcoin.quoters.yf_quoter import YFQuoter
 
 

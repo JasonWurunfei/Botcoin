@@ -1,51 +1,63 @@
-import yfinance as yf
-import json
-from botcoin.strategies.dip_buyer import DipBuyerStrategy
+from fastapi import FastAPI
 
-if __name__ == "__main__":
-    # Initialize the strategy
-    strategy = DipBuyerStrategy(threshold=2, trade_amount=0.9, stop_gain=0.012)
+from botcoin.cost.trade import CommissionTradeCost
 
-    # Define the watchlist of tickers
-    watchlist = [
-        'mstr',
-        'gme',
-        'AAPL',
-        'MSFT',
-        'AMZN',
-        'GOOGL',
-        'TSLA',
-        'META',
-        'NFLX',
-        'NVDA',
-        'AMD',
-        'INTC'
-    ]
+description = """
+Botcoint. 🚀
 
-    print("Watchlist:")
-    print(watchlist)
+Welcome to the Botcoin API documentation!
 
-    print("Dip Buyer Strategy:")
-    print("Threshold:", strategy.threshold)
-    print("Tradeable stocks:")
-    print(strategy.screening(watchlist))
+"""
 
-    # all_trades = []
+app = FastAPI(
+    title="Botcoin",
+    description=description,
+    summary="Botcoin API",
+    version="0.0.1",
+    license_info={
+        "name": "Apache 2.0",
+        "url": "https://www.apache.org/licenses/LICENSE-2.0.html",
+    },
+)
 
-    # # Loop through each ticker in the watchlist
-    # for ticker in watchlist:
-    #     # Fetch ticker information
-    #     ticker_info = yf.Ticker(ticker)
+commission_trade_cost = CommissionTradeCost(fee_rate=0.0008, minimum_fee=1)
 
-    #     # Fetch 2 years of daily candles
-    #     candles = ticker_info.history(period="2y", interval="1d")
-    #     prices = candles[["Open", "High", "Low", "Close"]]
+@app.get("/risk")
+def risk_sell(risk_amount: float, num_of_shares: int, open_price: float, loss_win_ratio: float) -> dict:
+    '''
+    Compute risk sell OCO order. It will return a dictionary with the following keys:
+    - `limit_price`: The limit price for the sell order.
+    - `stop_price`: The stop price for the sell order.
+    - `risk_per_share`: The risk amount per share.
+    - `risk_percent`: The risk percentage.
+    - `gain_per_share`: The gain amount per share.
+    - `gain_percent`: The gain percentage.
+    - `commission`: The commission cost for the trade.
 
-    #     # Replay the strategy on the historical data
-    #     trades = strategy.get_history_tradeable_records(prices)
-    #     all_trades.extend(trades)
     
+    Args:
+    - `risk_amount` (float): The amount of risk you are willing to take.
+    - `num_of_shares` (int): The number of shares you are selling.
+    - `open_price` (float): The price at which you opened the position.
+    - `loss_win_ratio` (float): The ratio of loss to win.
     
-    # all_trades.sort(key=lambda x: x['date'])
-    # bal, records, win_rate = strategy.history_replay(all_trades)
-    # print(f"Final balance: {bal}, win rate: {win_rate} of {len(records)} trades")
+    Returns:
+        dict: A dictionary containing the limit price, stop price, risk per share, gain per share, 
+        and their respective percentages, along with the commission cost.
+    '''
+    risk_per_share = risk_amount / num_of_shares
+    gain_per_share = risk_per_share / loss_win_ratio
+    limit_price = open_price + gain_per_share
+    stop_price = open_price - risk_per_share
+    risk_percent = (risk_per_share / open_price) * 100
+    gain_percent = (gain_per_share / open_price) * 100
+    return {
+        "limit_price": round(limit_price, 2),
+        "stop_price": round(stop_price, 2),
+        "risk_per_share": round(risk_per_share, 2),
+        "risk_percent": round(risk_percent, 2),
+        "gain_per_share": round(gain_per_share, 2),
+        "gain_percent": round(gain_percent, 2),
+        "commission_fee": commission_trade_cost.calculate_cost(num_of_shares * open_price),
+    }
+

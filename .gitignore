@@ -60,3 +60,6 @@ pip-wheel-metadata/
 
 # Poetry
 poetry.lock
+
+# data
+*.parquet

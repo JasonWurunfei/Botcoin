@@ -62,4 +62,4 @@ pip-wheel-metadata/
 poetry.lock
 
 # data
-*.parquet
+data/*

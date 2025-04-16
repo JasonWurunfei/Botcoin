@@ -4,6 +4,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 import pytz
 
+
 class HistoricalDataManager:
     """
     A class to manage and fetch 1-minute candlestick data from Yahoo Finance.
@@ -94,7 +95,7 @@ class HistoricalDataManager:
 
         if os.path.exists(data_path):
             local_data = self.data
-            local_start = local_data.index.min()
+            local_start =  local_data.index.min()
             local_end = local_data.index.max()
 
             # If the requested range is within the range of the local data, no need to fetch
@@ -111,7 +112,10 @@ class HistoricalDataManager:
         """
         data_path = self._get_local_data_path()
         if os.path.exists(data_path):
-            return pd.read_parquet(data_path)
+            df = pd.read_parquet(data_path)
+            df.index = pd.to_datetime(df.index)
+            df.index = df.index.tz_convert(self.tz)
+            return df
         return pd.DataFrame()
             
     def _merge_data(self, new_data: pd.DataFrame) -> None:
@@ -145,6 +149,10 @@ class HistoricalDataManager:
         Returns:
             pd.DataFrame: DataFrame containing the 1-minute candlestick data.
         """
+        # Ensure the start is before the end
+        if start > end:
+            raise ValueError("Start date must be before end date.")
+        
         # Ensure the date range is within the last 30 days
         today = datetime.today().replace(tzinfo=self.tz)
         if start < today - timedelta(days=30):
@@ -164,3 +172,79 @@ class HistoricalDataManager:
             self._merge_data(df)
         
         return df
+
+import os
+import json
+import websocket
+from dotenv import load_dotenv
+
+# Load variables from .env file into environment
+load_dotenv()
+
+
+class PriceTicker:
+    """
+    A class to manage and fetch real-time price data for a list of stock tickers.
+    """
+
+    def __init__(self, tickers:  list[str], tz: str = 'US/Eastern'):
+        """
+        Initializes the PriceTicker with the given list of tickers.
+
+        Args:
+            ticker (list[str]): List of stock ticker symbols.
+            tz (str, optional): Timezone for the data, default is 'US/Eastern'.
+        """
+        self.tickers = tickers
+        self.tz = pytz.timezone(tz)
+        
+        def on_open(ws):
+            for ticker in self.tickers:
+                ws.send(json.dumps({"type": "subscribe", "symbol": ticker}))
+                
+        def on_message(ws, message):
+            msg = json.loads(message)
+            # print(json.dumps(data, indent=4))
+            records = msg.get("data", None)
+            if records:
+                for record in records:
+                    t = datetime.fromtimestamp(record["t"] / 1000, tz=self.tz)
+                    p = float(record["p"])
+                    s = record["s"]
+                    self.on_message(s, t, p)
+
+        def on_error(ws, error):
+            print(error)
+
+        def on_close(ws):
+            print("### closed ###")
+                
+        self.ws = websocket.WebSocketApp(
+            f"wss://ws.finnhub.io?token={os.getenv('FINNHUB_TOKEN')}",
+            on_message=on_message,
+            on_error=on_error,
+            on_close=on_close,
+        )
+        self.ws.on_open = on_open
+        
+    
+    def tick(self):
+        """
+        Starts the WebSocket connection to fetch real-time price data.
+        """
+        self.ws.run_forever()
+        
+
+    def on_message(self, s, t, p):
+        """
+        Callback function to handle incoming messages.
+        
+        Args:
+            s (str): The stock ticker symbol.
+            t (datetime): The timestamp of the price update.
+            p (float): The price of the stock.
+        """
+        # Process the message as needed
+        print(f"{t} - {s}: {p}")
+
+            

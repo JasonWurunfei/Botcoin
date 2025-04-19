@@ -1,6 +1,8 @@
 import os
+import logging
 import yfinance as yf
 import pandas as pd
+import numpy as np
 from datetime import datetime, timedelta
 import pytz
 
@@ -15,6 +17,9 @@ class HistoricalDataManager:
         data_folder (str): Folder where data will be saved locally.
         tz (str): Timezone for the data, default is 'US/Eastern'.
     """
+
+    logger = logging.getLogger(__qualname__)
+    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s: %(message)s')
 
     def __init__(self, ticker: str, data_folder: str = 'data', tz: str = 'US/Eastern'):
         """
@@ -58,7 +63,7 @@ class HistoricalDataManager:
         current_start = start
         while current_start < end:
             current_end = min(current_start + timedelta(days=max_days), end)
-            print(f"Fetching data from {current_start} to {current_end}")
+            self.logger.info(f"Fetching data from {current_start} to {current_end}")
 
             # Fetch data from yfinance
             df = yf.download(
@@ -78,7 +83,7 @@ class HistoricalDataManager:
 
             current_start = current_end
 
-        return pd.concat(all_data) if all_data else pd.DataFrame()        
+        return pd.concat(all_data) if all_data else pd.DataFrame()
 
     def _check_data_in_local(self, start: datetime, end: datetime) -> bool:
         """
@@ -132,9 +137,9 @@ class HistoricalDataManager:
             self.data = self.data[~self.data.index.duplicated(keep='last')].sort_index()
             # Save the merged data back to local storage
             self.data.to_parquet(self._get_local_data_path())
-            print(f"Data merged and saved to {self._get_local_data_path()}")
+            self.logger.info(f"Data merged and saved to {self._get_local_data_path()}") 
         else:
-            print("No new data to merge.")
+            self.logger.warning("No new data to merge.")
         
 
     def get_data(self, start: datetime, end: datetime) -> pd.DataFrame:
@@ -160,11 +165,11 @@ class HistoricalDataManager:
         
         # Check if data is already available locally
         if self._check_data_in_local(start, end):
-            print("Loading data from local storage...")
+            self.logger.info("Data is already available locally.")
             return self.data[(self.data.index >= start) & (self.data.index <= end)]
 
         # Fetch data from Yahoo Finance if not available locally
-        print("Fetching new data...")
+        self.logger.info("Fetching data from Yahoo Finance.")
         df = self._fetch_data(start, end)
 
         # Save the fetched data locally for future use
@@ -247,4 +252,54 @@ class PriceTicker:
         # Process the message as needed
         print(f"{t} - {s}: {p}")
 
-            
+
+def generate_price_stream(ohlc_df, candle_duration='1min', avg_freq_per_minute=10, seed=None):
+    """
+    Simulate real-time price updates from historical OHLC data.
+    
+    Args:
+        ohlc_df (pd.DataFrame): DataFrame with ['DatetimeIndex', 'open', 'high', 'low', 'close', 'volume'].
+        candle_duration (str): Duration of each OHLC candle (e.g., '1min', '5min').
+        avg_freq_per_minute (int): Average number of price points to simulate per minute.
+        seed (int): Random seed for reproducibility.
+    
+    Returns:
+        pd.DataFrame: DataFrame with ['DatetimeIndex', 'price'].
+    """
+    if seed is not None:
+        np.random.seed(seed)
+
+    result = []
+
+    for idx, row in ohlc_df.iterrows():
+        start_time = idx.to_pydatetime()
+        duration = pd.to_timedelta(candle_duration)
+
+        # Number of points for this candle
+        n_points = np.random.poisson(avg_freq_per_minute * duration / pd.Timedelta("1min"))
+        n_points = max(n_points, 4)  # ensure at least open, high, low, close
+
+        # Generate random timestamps within the candle period
+        random_offsets = sorted(np.random.uniform(0, duration.total_seconds(), size=n_points))
+        timestamps = [start_time + timedelta(seconds=offset) for offset in random_offsets]
+
+        # Ensure first, high, low, and last prices are in the stream
+        prices = [row['Open'], row['High'], row['Low'], row['Close']]
+        
+        # Fill the rest with random prices between low and high
+        remaining = n_points - 4
+        if remaining > 0:
+            random_prices = np.random.uniform(row['Low'], row['High'], size=remaining).tolist()
+            prices.extend(random_prices)
+
+        # Shuffle all prices except open, high, low, close for randomness
+        np.random.shuffle(prices[1:-1])  # keep open at start and close at end
+
+        # Pair timestamps with sorted (by time) prices
+        stream = list(zip(timestamps, prices))
+        stream.sort(key=lambda x: x[0])  # sort by timestamp again
+
+        result.extend(stream)
+
+    return pd.DataFrame(result, columns=['timestamp', 'price']).set_index('timestamp')
+  

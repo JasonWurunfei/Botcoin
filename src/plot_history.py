@@ -1,5 +1,5 @@
 import pytz
-from datetime import datetime, timedelta
+from datetime import datetime
 import plotly.graph_objects as go
 from botcoin.data.data_fetcher import HistoricalDataManager
 

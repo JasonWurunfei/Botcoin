@@ -38,7 +38,3 @@ class Test_HistoricalDataManager(unittest.TestCase):
         end     = self.hdm.tz.localize(end)
         
         self.assertTrue(self.hdm._check_data_in_local(start=start, end=end), "Data is not in local data")   
-
-
-if __name__ == "__main__":
-    unittest.main()

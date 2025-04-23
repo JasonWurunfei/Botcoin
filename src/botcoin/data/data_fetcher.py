@@ -1,10 +1,20 @@
 import os
-import logging
-import yfinance as yf
-import pandas as pd
-import numpy as np
+import json
+import websockets
 from datetime import datetime, timedelta
+
 import pytz
+import numpy as np
+import pandas as pd
+import yfinance as yf
+from dotenv import load_dotenv
+
+from botcoin.utils.message_queue import BroadcastQueue
+from botcoin.utils.log import logging
+from botcoin.data.dataclasses import TickEvent
+
+# Load variables from .env file into environment
+load_dotenv()
 
 
 class HistoricalDataManager:
@@ -19,7 +29,6 @@ class HistoricalDataManager:
     """
 
     logger = logging.getLogger(__qualname__)
-    logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s: %(message)s')
 
     def __init__(self, ticker: str, data_folder: str = 'data', tz: str = 'US/Eastern'):
         """
@@ -178,79 +187,96 @@ class HistoricalDataManager:
         
         return df
 
-import os
-import json
-import websocket
-from dotenv import load_dotenv
 
-# Load variables from .env file into environment
-load_dotenv()
+import asyncio
+import json
+import os
+import logging
+from datetime import datetime
+
+import pytz
+import websockets
 
 
 class PriceTicker:
     """
-    A class to manage and fetch real-time price data for a list of stock tickers.
+    An async class to manage and fetch real-time price data for a list of stock tickers.
     """
+    
+    logger = logging.getLogger(__qualname__)
 
-    def __init__(self, tickers:  list[str], tz: str = 'US/Eastern'):
-        """
-        Initializes the PriceTicker with the given list of tickers.
-
-        Args:
-            ticker (list[str]): List of stock ticker symbols.
-            tz (str, optional): Timezone for the data, default is 'US/Eastern'.
-        """
+    def __init__(self, tickers: list[str], tz: str = 'US/Eastern', tick_broadcast: BroadcastQueue = None):
         self.tickers = tickers
         self.tz = pytz.timezone(tz)
-        
-        def on_open(ws):
-            for ticker in self.tickers:
-                ws.send(json.dumps({"type": "subscribe", "symbol": ticker}))
-                
-        def on_message(ws, message):
+        self.url = f"wss://ws.finnhub.io?token={os.getenv('FINNHUB_TOKEN')}"
+        self.tick_queue = tick_broadcast or BroadcastQueue()
+    
+    async def connect(self):
+        """
+        Connects to the websocket and starts streaming price data.
+        """
+        while True:
+            try:
+                async with websockets.connect(self.url) as ws:
+                    await self._subscribe(ws)
+                    self.logger.info("WebSocket connection established.")
+
+                    while True:
+                        message = await ws.recv()
+                        await self._handle_message(message)
+
+            except websockets.ConnectionClosed:
+                self.logger.warning("WebSocket connection closed. Reconnecting in 5 seconds...")
+                await asyncio.sleep(5)
+
+            except Exception as e:
+                self.logger.exception(f"Unexpected error: {e}")
+                await asyncio.sleep(5)
+
+    async def _subscribe(self, ws):
+        """
+        Subscribes to the given tickers.
+        """
+        for ticker in self.tickers:
+            await ws.send(json.dumps({"type": "subscribe", "symbol": ticker}))
+            self.logger.info(f"Subscribed to {ticker}")
+
+    async def _handle_message(self, message: str):
+        """
+        Handles incoming WebSocket messages.
+        """
+        try:
             msg = json.loads(message)
-            # print(json.dumps(data, indent=4))
             records = msg.get("data", None)
             if records:
                 for record in records:
                     t = datetime.fromtimestamp(record["t"] / 1000, tz=self.tz)
                     p = float(record["p"])
                     s = record["s"]
-                    self.on_message(s, t, p)
+                    await self.on_message(s, t, p)
+        except Exception as e:
+            self.logger.warning(f"Failed to parse message: {e}")
 
-        def on_error(ws, error):
-            print(error)
-
-        def on_close(ws):
-            print("### closed ###")
-                
-        self.ws = websocket.WebSocketApp(
-            f"wss://ws.finnhub.io?token={os.getenv('FINNHUB_TOKEN')}",
-            on_message=on_message,
-            on_error=on_error,
-            on_close=on_close,
+    async def on_message(self, s: str, t: datetime, p: float):
+        """
+        Called when a new price tick is received.
+        Override or hook into this for custom behavior.
+        """
+        tick_evt = TickEvent(
+            event_type="tick",
+            event_time=t,
+            symbol=s,
+            price=p,
         )
-        self.ws.on_open = on_open
+        self.logger.info(tick_evt)
         
-    
-    def tick(self):
-        """
-        Starts the WebSocket connection to fetch real-time price data.
-        """
-        self.ws.run_forever()
+        await self.tick_queue.publish(tick_evt)
         
-
-    def on_message(self, s, t, p):
+    def get_broadcast_queue(self) -> BroadcastQueue:
         """
-        Callback function to handle incoming messages.
-        
-        Args:
-            s (str): The stock ticker symbol.
-            t (datetime): The timestamp of the price update.
-            p (float): The price of the stock.
+        Returns the broadcast queue for price ticks.
         """
-        # Process the message as needed
-        print(f"{t} - {s}: {p}")
+        return self.tick_queue
 
 
 def generate_price_stream(ohlc_df, candle_duration='1min', avg_freq_per_minute=10, seed=None):

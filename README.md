@@ -5,7 +5,7 @@ The problem with many tools for trading is that it often back test their results
 
 Botcoin provides a powerful infrastructure to quickly validate trading strategy that simulates real world trading environment. There are mainly five components in Botcoin:
 1. **Data provider**: This is the data source for the trading strategy. It can be a real time data source or a historical data source. The data provider is responsible for providing the data to the trading strategy. It can be configured to support different data sources, such as Finnhub, Alpaca, Binance, etc. The data provider is also responsible for providing the data in a format that is compatible with the trading strategy.
-2. **Trading engine**: This component executes the trading strategy based on the data provided. It handles order placement and performance tracking.
+2. **Trade Runner**: This component executes the trading strategy based on the data provided. It handles order placement and performance tracking.
 3. **Strategy**: This is the core of the trading system. It contains the logic for making trading decisions based on the data provided by the data provider. The strategy can be implemented using different algorithms, such as moving average, RSI, etc.
 4. **Risk management**: This component is responsible for managing the risk associated with the trading strategy. It can be configured to support different risk management techniques, such as stop loss, take profit, etc.
 5. **Brokerage**: This component is responsible for executing the trades on the brokerage platform. Botcoin implemented a simulated brokerage that simulates the real world trading environment. It can be configured to support different brokerage platforms, such as Saxo, Binance, etc.

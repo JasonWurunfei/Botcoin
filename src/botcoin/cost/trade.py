@@ -1,3 +1,5 @@
+"""This module is used to implement a simple trade cost model for the botcoin framework."""
+
 import math
 
 
@@ -42,7 +44,8 @@ class CommissionTradeCost:
 
     def calculate_cost(self, trade_amount: float) -> float:
         """
-        Calculate the trade cost based on the trade amount. The cost will be rounded ceil to 2 decimal places.
+        Calculate the trade cost based on the trade amount. The cost will
+        be rounded ceil to 2 decimal places.
 
         Args:
             trade_amount (float): The amount of the trade.
@@ -50,7 +53,7 @@ class CommissionTradeCost:
         Returns:
             float: The calculated trade cost.
         """
-        
+
         cost = trade_amount * self.fee_rate
         cost = math.ceil(cost * 100) / 100.0
         return max(cost, self.minimum_fee)

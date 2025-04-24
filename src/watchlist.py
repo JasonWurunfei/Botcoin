@@ -1,3 +1,5 @@
+"""This module contains the watchlist of stocks to be monitored."""
+
 tickers = [
     "AAPL",
     "META",

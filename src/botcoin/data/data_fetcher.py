@@ -1,8 +1,11 @@
+"""This module is used to fetch historical and real-time data for stock tickers."""
+
 import os
 import json
-import websockets
+import asyncio
 from datetime import datetime, timedelta
 
+import websockets
 import pytz
 import numpy as np
 import pandas as pd
@@ -30,7 +33,7 @@ class HistoricalDataManager:
 
     logger = logging.getLogger(__qualname__)
 
-    def __init__(self, ticker: str, data_folder: str = 'data', tz: str = 'US/Eastern'):
+    def __init__(self, ticker: str, data_folder: str = "data", tz: str = "US/Eastern"):
         """
         Initializes the HistoricalDataManager with the given ticker and data folder.
 
@@ -44,7 +47,6 @@ class HistoricalDataManager:
         if not os.path.exists(self.data_folder):
             os.makedirs(self.data_folder)
         self.data = self._load_local_data()
-        
 
     def _get_local_data_path(self) -> str:
         """
@@ -72,7 +74,7 @@ class HistoricalDataManager:
         current_start = start
         while current_start < end:
             current_end = min(current_start + timedelta(days=max_days), end)
-            self.logger.info(f"Fetching data from {current_start} to {current_end}")
+            self.logger.info("Fetching data from %s to %s", current_start, current_end)
 
             # Fetch data from yfinance
             df = yf.download(
@@ -87,14 +89,14 @@ class HistoricalDataManager:
             if not df.empty:
                 df.index = pd.to_datetime(df.index)
                 df.index = df.index.tz_convert(self.tz)
-                df = df[~df.index.duplicated(keep='last')]  # Remove duplicated index
+                df = df[~df.index.duplicated(keep="last")]  # Remove duplicated index
                 all_data.append(df)
 
             current_start = current_end
 
         return pd.concat(all_data) if all_data else pd.DataFrame()
 
-    def _check_data_in_local(self, start: datetime, end: datetime) -> bool:
+    def check_data_in_local(self, start: datetime, end: datetime) -> bool:
         """
         Checks if data for the given date range already exists in local storage.
 
@@ -109,7 +111,7 @@ class HistoricalDataManager:
 
         if os.path.exists(data_path):
             local_data = self.data
-            local_start =  local_data.index.min()
+            local_start = local_data.index.min()
             local_end = local_data.index.max()
 
             # If the requested range is within the range of the local data, no need to fetch
@@ -131,7 +133,7 @@ class HistoricalDataManager:
             df.index = df.index.tz_convert(self.tz)
             return df
         return pd.DataFrame()
-            
+
     def _merge_data(self, new_data: pd.DataFrame) -> None:
         """
         Merges new data into the existing local data.
@@ -143,17 +145,16 @@ class HistoricalDataManager:
             # Concatenate new data with existing data
             self.data = pd.concat([self.data, new_data])
             # Drop duplicates and sort by index
-            self.data = self.data[~self.data.index.duplicated(keep='last')].sort_index()
+            self.data = self.data[~self.data.index.duplicated(keep="last")].sort_index()
             # Save the merged data back to local storage
             self.data.to_parquet(self._get_local_data_path())
-            self.logger.info(f"Data merged and saved to {self._get_local_data_path()}") 
+            self.logger.info("Data merged and saved to %s", self._get_local_data_path())
         else:
             self.logger.warning("No new data to merge.")
-        
 
     def get_data(self, start: datetime, end: datetime) -> pd.DataFrame:
         """
-        Retrieves 1-minute candlestick data for the specified date range. 
+        Retrieves 1-minute candlestick data for the specified date range.
         If data is available locally, it will be used. If not, it will be fetched from Yahoo Finance.
 
         Args:
@@ -166,14 +167,14 @@ class HistoricalDataManager:
         # Ensure the start is before the end
         if start > end:
             raise ValueError("Start date must be before end date.")
-        
+
         # Ensure the date range is within the last 30 days
         today = datetime.today().replace(tzinfo=self.tz)
         if start < today - timedelta(days=30):
             raise ValueError("Data requests cannot go beyond 30 days in the past.")
-        
+
         # Check if data is already available locally
-        if self._check_data_in_local(start, end):
+        if self.check_data_in_local(start, end):
             self.logger.info("Data is already available locally.")
             return self.data[(self.data.index >= start) & (self.data.index <= end)]
 
@@ -184,33 +185,28 @@ class HistoricalDataManager:
         # Save the fetched data locally for future use
         if not df.empty:
             self._merge_data(df)
-        
+
         return df
-
-
-import asyncio
-import json
-import os
-import logging
-from datetime import datetime
-
-import pytz
-import websockets
 
 
 class PriceTicker:
     """
     An async class to manage and fetch real-time price data for a list of stock tickers.
     """
-    
+
     logger = logging.getLogger(__qualname__)
 
-    def __init__(self, tickers: list[str], tz: str = 'US/Eastern', tick_broadcast: BroadcastQueue = None):
+    def __init__(
+        self,
+        tickers: list[str],
+        tz: str = "US/Eastern",
+        tick_broadcast: BroadcastQueue = None,
+    ):
         self.tickers = tickers
         self.tz = pytz.timezone(tz)
         self.url = f"wss://ws.finnhub.io?token={os.getenv('FINNHUB_TOKEN')}"
         self.tick_queue = tick_broadcast or BroadcastQueue()
-    
+
     async def connect(self):
         """
         Connects to the websocket and starts streaming price data.
@@ -226,11 +222,13 @@ class PriceTicker:
                         await self._handle_message(message)
 
             except websockets.ConnectionClosed:
-                self.logger.warning("WebSocket connection closed. Reconnecting in 5 seconds...")
+                self.logger.warning(
+                    "WebSocket connection closed. Reconnecting in 5 seconds..."
+                )
                 await asyncio.sleep(5)
 
-            except Exception as e:
-                self.logger.exception(f"Unexpected error: {e}")
+            except asyncio.TimeoutError as e:
+                self.logger.exception("Unexpected error: %s", e)
                 await asyncio.sleep(5)
 
     async def _subscribe(self, ws):
@@ -239,7 +237,7 @@ class PriceTicker:
         """
         for ticker in self.tickers:
             await ws.send(json.dumps({"type": "subscribe", "symbol": ticker}))
-            self.logger.info(f"Subscribed to {ticker}")
+            self.logger.info("Subscribed to %s", ticker)
 
     async def _handle_message(self, message: str):
         """
@@ -254,8 +252,8 @@ class PriceTicker:
                     p = float(record["p"])
                     s = record["s"]
                     await self.on_message(s, t, p)
-        except Exception as e:
-            self.logger.warning(f"Failed to parse message: {e}")
+        except (json.JSONDecodeError, KeyError, TypeError) as e:
+            self.logger.warning("Failed to parse message: %s", e)
 
     async def on_message(self, s: str, t: datetime, p: float):
         """
@@ -269,9 +267,9 @@ class PriceTicker:
             price=p,
         )
         self.logger.info(tick_evt)
-        
+
         await self.tick_queue.publish(tick_evt)
-        
+
     def get_broadcast_queue(self) -> BroadcastQueue:
         """
         Returns the broadcast queue for price ticks.
@@ -279,16 +277,18 @@ class PriceTicker:
         return self.tick_queue
 
 
-def generate_price_stream(ohlc_df, candle_duration='1min', avg_freq_per_minute=10, seed=None):
+def generate_price_stream(
+    ohlc_df, candle_duration="1min", avg_freq_per_minute=10, seed=None
+):
     """
     Simulate real-time price updates from historical OHLC data.
-    
+
     Args:
         ohlc_df (pd.DataFrame): DataFrame with ['DatetimeIndex', 'open', 'high', 'low', 'close', 'volume'].
         candle_duration (str): Duration of each OHLC candle (e.g., '1min', '5min').
         avg_freq_per_minute (int): Average number of price points to simulate per minute.
         seed (int): Random seed for reproducibility.
-    
+
     Returns:
         pd.DataFrame: DataFrame with ['DatetimeIndex', 'price'].
     """
@@ -302,20 +302,28 @@ def generate_price_stream(ohlc_df, candle_duration='1min', avg_freq_per_minute=1
         duration = pd.to_timedelta(candle_duration)
 
         # Number of points for this candle
-        n_points = np.random.poisson(avg_freq_per_minute * duration / pd.Timedelta("1min"))
+        n_points = np.random.poisson(
+            avg_freq_per_minute * duration / pd.Timedelta("1min")
+        )
         n_points = max(n_points, 4)  # ensure at least open, high, low, close
 
         # Generate random timestamps within the candle period
-        random_offsets = sorted(np.random.uniform(0, duration.total_seconds(), size=n_points))
-        timestamps = [start_time + timedelta(seconds=offset) for offset in random_offsets]
+        random_offsets = sorted(
+            np.random.uniform(0, duration.total_seconds(), size=n_points)
+        )
+        timestamps = [
+            start_time + timedelta(seconds=offset) for offset in random_offsets
+        ]
 
         # Ensure first, high, low, and last prices are in the stream
-        prices = [row['Open'], row['High'], row['Low'], row['Close']]
-        
+        prices = [row["Open"], row["High"], row["Low"], row["Close"]]
+
         # Fill the rest with random prices between low and high
         remaining = n_points - 4
         if remaining > 0:
-            random_prices = np.random.uniform(row['Low'], row['High'], size=remaining).tolist()
+            random_prices = np.random.uniform(
+                row["Low"], row["High"], size=remaining
+            ).tolist()
             prices.extend(random_prices)
 
         # Shuffle all prices except open, high, low, close for randomness
@@ -327,5 +335,4 @@ def generate_price_stream(ohlc_df, candle_duration='1min', avg_freq_per_minute=1
 
         result.extend(stream)
 
-    return pd.DataFrame(result, columns=['timestamp', 'price']).set_index('timestamp')
-  
+    return pd.DataFrame(result, columns=["timestamp", "price"]).set_index("timestamp")

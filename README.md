@@ -32,3 +32,16 @@ To make sure the Finnhub Historical data manager works, you need to put your API
 ```.env
 FINNHUB_TOKEN=you-api-key
 ```
+
+If you use VSCode, you should also set the following variables in the settings.json file.
+
+```json
+{
+    "python.envFile": "${workspaceFolder}/.env",
+    "python.analysis.extraPaths": [
+        "./src",
+        "./tests"
+    ],
+    "python.analysis.typeCheckingMode": "basic"
+}
+```

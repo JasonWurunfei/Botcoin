@@ -64,3 +64,6 @@ poetry.lock
 # data
 *.parquet
 !tests/data/*
+
+# test ground file
+src/test_ground.py

@@ -42,7 +42,10 @@ class TickEvent(Event):
     event_time: datetime
 
     def __repr__(self):
-        return f"TickEvent(symbol={self.symbol}, price={self.price}, event_time={self.event_time.isoformat()})"
+        return (
+            f"TickEvent(symbol={self.symbol}, price={self.price}, "
+            + f"event_time={self.event_time.isoformat()})"
+        )
 
 
 class OrderStatus(Enum):
@@ -65,13 +68,15 @@ class OrderType(Enum):
     MARKET = "market"
     LIMIT = "limit"
     OCO = "oco"
+    STOP = "stop"
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class Order:
     """
     Represents an order in the botcoin framework.
-    This class contains the details of an order including its ID, symbol, quantity, direction, and type.
+    This class contains the details of an order including its ID, symbol,
+    quantity, direction, and type.
     """
 
     order_id: str
@@ -98,7 +103,10 @@ class MarketOrder(Order):
     order_type: OrderType = OrderType.MARKET
 
     def __repr__(self):
-        return f"MarketOrder(order_id={self.order_id}, symbol={self.symbol}, quantity={self.quantity}, direction={self.direction})"
+        return (
+            f"MarketOrder(order_id={self.order_id}, symbol={self.symbol},"
+            + f" quantity={self.quantity}, direction={self.direction})"
+        )
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -112,14 +120,21 @@ class LimitOrder(Order):
     limit_price: float
 
     def __post_init__(self):
-        super().__post_init__()
+        if self.direction not in ["buy", "sell"]:
+            raise ValueError(f"Invalid direction: {self.direction}")
+        if self.quantity <= 0:
+            raise ValueError(f"Quantity must be greater than zero: {self.quantity}")
         if self.limit_price <= 0:
             raise ValueError(
                 f"Limit price must be greater than zero: {self.limit_price}"
             )
 
     def __repr__(self):
-        return f"LimitOrder(order_id={self.order_id}, symbol={self.symbol}, quantity={self.quantity}, direction={self.direction}, limit_price={self.limit_price})"
+        return (
+            f"LimitOrder(order_id={self.order_id}, symbol={self.symbol}, "
+            + f"quantity={self.quantity}, direction={self.direction}, "
+            + f"limit_price={self.limit_price})"
+        )
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -135,7 +150,10 @@ class OcoOrder(Order):
     stop_price: float
 
     def __post_init__(self):
-        super().__post_init__()
+        if self.direction not in ["buy", "sell"]:
+            raise ValueError(f"Invalid direction: {self.direction}")
+        if self.quantity <= 0:
+            raise ValueError(f"Quantity must be greater than zero: {self.quantity}")
         if self.limit_price <= 0:
             raise ValueError(
                 f"Limit price must be greater than zero: {self.limit_price}"
@@ -144,7 +162,11 @@ class OcoOrder(Order):
             raise ValueError(f"Stop price must be greater than zero: {self.stop_price}")
 
     def __repr__(self):
-        return f"OcoOrder(order_id={self.order_id}, symbol={self.symbol}, quantity={self.quantity}, direction={self.direction}, limit_price={self.limit_price}, stop_price={self.stop_price})"
+        return (
+            f"OcoOrder(order_id={self.order_id}, symbol={self.symbol}, "
+            + f"quantity={self.quantity}, direction={self.direction}, "
+            + f"limit_price={self.limit_price}, stop_price={self.stop_price})"
+        )
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -175,3 +197,21 @@ class OrderStatusEvent(Event):
 
     def __repr__(self):
         return f"OrderStatusEvent(order={self.order}, status={self.status.value})"
+
+
+@dataclass(kw_only=True, slots=True, order=True)
+class OrderBookItem:
+    """
+    Represents an order book item.
+    """
+
+    order_id: str
+    order: Order
+    queue: Queue
+    status: OrderStatus = OrderStatus.NOT_TRADED
+
+    def __repr__(self):
+        return (
+            f"OrderBookItem(order_id={self.order_id}, order={self.order}, "
+            + f"status={self.status.value})"
+        )

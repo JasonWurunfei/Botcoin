@@ -206,6 +206,7 @@ class PriceTicker:
         self.tz = pytz.timezone(tz)
         self.url = f"wss://ws.finnhub.io?token={os.getenv('FINNHUB_TOKEN')}"
         self.tick_queue = tick_broadcast or BroadcastQueue()
+        self.ws = None
 
     async def connect(self):
         """
@@ -214,6 +215,7 @@ class PriceTicker:
         while True:
             try:
                 async with websockets.connect(self.url) as ws:
+                    self.ws = ws
                     await self._subscribe(ws)
                     self.logger.info("WebSocket connection established.")
 
@@ -238,6 +240,44 @@ class PriceTicker:
         for ticker in self.tickers:
             await ws.send(json.dumps({"type": "subscribe", "symbol": ticker}))
             self.logger.info("Subscribed to %s", ticker)
+
+    async def subscribe(self, symbol: str):
+        """
+        Subscribes to a new ticker symbol.
+        """
+        try:
+            if not self.ws:
+                raise ValueError("WebSocket connection is not established.")
+            if symbol not in self.tickers:
+                self.tickers.append(symbol)
+                await self.ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
+                self.logger.info("Subscribed to %s", symbol)
+        except ValueError as e:
+            self.logger.error("WebSocket connection error: %s", e)
+            return
+
+    async def unsubscribe(self, symbol: str):
+        """
+        Unsubscribes from a ticker symbol.
+        """
+        try:
+            if not self.ws:
+                raise ValueError("WebSocket connection is not established.")
+
+            if symbol in self.tickers:
+                self.tickers.remove(symbol)
+                await self.ws.send(
+                    json.dumps({"type": "unsubscribe", "symbol": symbol})
+                )
+                self.logger.info("Unsubscribed from %s", symbol)
+            else:
+                self.logger.warning(
+                    "Symbol %s not found in subscribed tickers.", symbol
+                )
+
+        except ValueError as e:
+            self.logger.error("WebSocket connection error: %s", e)
+            return
 
     async def _handle_message(self, message: str):
         """

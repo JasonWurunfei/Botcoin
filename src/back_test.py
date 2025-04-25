@@ -14,7 +14,7 @@ from botcoin.data.dataclasses import TickEvent
 
 ticker = PriceTicker(["MSTR"])
 
-broker = SimpleBroker()
+broker = SimpleBroker(ticker)
 broker_queue = broker.get_queue()
 
 runner_queue = asyncio.Queue()

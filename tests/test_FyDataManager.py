@@ -9,15 +9,15 @@ import pandas as pd
 from botcoin.data.historical import YfDataManager
 
 
-class Test_historicalDataManager(unittest.TestCase):
-    """Unit tests for the HistoricalDataManager class."""
+class TestFyDataManager(unittest.TestCase):
+    """Unit tests for the YfDataManager class."""
 
     def setUp(self):
-        self.ticker = "AAPL"
+        self.symbol = "AAPL"
         self.data_path = os.path.join(
-            "tests/test_data", f"{self.ticker}_1min_data.parquet"
+            "tests/test_data", f"{self.symbol}_1min_data.parquet"
         )
-        self.hdm = YfDataManager(ticker=self.ticker, data_folder="tests/test_data")
+        self.hdm = YfDataManager(symbol=self.symbol, data_folder="tests/test_data")
         self.df = pd.read_parquet(self.data_path)
         self.earliest_date = self.df.index.min()  # 2025-03-18 09:30:00-04:00
         self.latest_date = self.df.index.max()  # 2025-04-15 15:59:00-04:00

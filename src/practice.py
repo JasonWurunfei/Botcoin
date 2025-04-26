@@ -1,20 +1,22 @@
 """This is script to practice trading with the botcoin library."""
 
 import asyncio
+from datetime import datetime
 
-from botcoin.data.tickers import FinnhubTicker
+# from botcoin.data.tickers import FinnhubTicker
+from botcoin.data.tickers import HistoricalTicker
 from botcoin.broker.simulated import SimpleBroker
 
-from botcoin.data.dataclasses import (
-    MarketOrder,
-    LimitOrder,
-    PlaceOrderEvent,
-    TickEvent,
-    now_us_east,
-)
+from botcoin.data.dataclasses import MarketOrder, LimitOrder, PlaceOrderEvent
 
+SYMBOL = "AAPL"  # Example symbol, replace with your desired stock symbol
 
-ticker = FinnhubTicker([])
+# ticker = FinnhubTicker([])
+
+start = datetime(year=2025, month=4, day=25, hour=9, minute=30, second=10)
+end = datetime(year=2025, month=4, day=25, hour=15, minute=59, second=55)
+ticker = HistoricalTicker(start_date=start, end_date=end, real_time=True)
+
 ticker_queue = ticker.get_broadcast_queue()
 
 broker = SimpleBroker(ticker)
@@ -24,35 +26,26 @@ broker_queue = broker.get_queue()
 async def main():
     """ "Main function to run the backtest."""
     task = asyncio.gather(
-        # ticker.connect(),  # uncomment this when you want live data, make sure market open
+        ticker.stream(),
         broker.run(),
     )
 
-    await asyncio.sleep(1)
-    queue = asyncio.Queue()
-
     # Make a fake market order to test the broker
-    order = MarketOrder(order_id="1234", symbol="MSTR", quantity=10, direction="sell")
+    queue = asyncio.Queue()
+    order = MarketOrder(order_id="1234", symbol=SYMBOL, quantity=10, direction="sell")
     order_event = PlaceOrderEvent(order=order, reply_to=queue)
     await broker_queue.put(order_event)
 
     # Make a fake limit order to test the broker
     order = LimitOrder(
         order_id="5678",
-        symbol="MSTR",
+        symbol=SYMBOL,
         quantity=5,
         direction="buy",
-        limit_price=400.0,
+        limit_price=206.9,
     )
     order_event = PlaceOrderEvent(order=order, reply_to=queue)
     await broker_queue.put(order_event)
-
-    # Simulate a price tick
-    await asyncio.sleep(1)  # Simulate some delay before the tick
-    tick = TickEvent(
-        symbol="MSTR", price=321.0, event_time=now_us_east()  # Example price
-    )
-    await ticker_queue.publish(tick)
 
     await task
 

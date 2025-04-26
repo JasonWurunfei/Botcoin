@@ -1,4 +1,4 @@
-"""This module is used to fetch historical and real-time data for stock tickers."""
+"""This module is used to fetch historical and real-time data for stock symbols."""
 
 import os
 from datetime import datetime, timedelta
@@ -21,22 +21,22 @@ class YfDataManager:
     Data is stored locally to avoid repeated requests for the same data.
 
     Attributes:
-        ticker (str): The stock ticker symbol.
+        symbol (str): The stock ticker symbol.
         data_folder (str): Folder where data will be saved locally.
         tz (str): Timezone for the data, default is 'US/Eastern'.
     """
 
     logger = logging.getLogger(__qualname__)
 
-    def __init__(self, ticker: str, data_folder: str = "data", tz: str = "US/Eastern"):
+    def __init__(self, symbol: str, data_folder: str = "data", tz: str = "US/Eastern"):
         """
-        Initializes the HistoricalDataManager with the given ticker and data folder.
+        Initializes the HistoricalDataManager with the given symbol and data folder.
 
         Args:
-            ticker (str): The stock ticker symbol to fetch data for.
+            symbol (str): The stock symbol symbol to fetch data for.
             data_folder (str, optional): Folder to store local data. Defaults to 'data'.
         """
-        self.ticker = ticker
+        self.symbol = symbol
         self.data_folder = data_folder
         self.tz = pytz.timezone(tz)
         if not os.path.exists(self.data_folder):
@@ -45,12 +45,12 @@ class YfDataManager:
 
     def _get_local_data_path(self) -> str:
         """
-        Returns the local file path where the data for the ticker is stored.
+        Returns the local file path where the data for the symbol is stored.
 
         Returns:
             str: Local path to the data file.
         """
-        return os.path.join(self.data_folder, f"{self.ticker}_1min_data.parquet")
+        return os.path.join(self.data_folder, f"{self.symbol}_1min_data.parquet")
 
     def _fetch_data(self, start: datetime, end: datetime) -> pd.DataFrame:
         """
@@ -74,7 +74,7 @@ class YfDataManager:
 
             # Fetch data from yfinance
             df = yf.download(
-                self.ticker,
+                self.symbol,
                 start=current_start,
                 end=current_end,
                 interval="1m",

@@ -14,7 +14,7 @@ def generate_price_stream(
 
     Args:
         ohlc_df (pd.DataFrame): DataFrame with
-                ['DatetimeIndex', 'open', 'high', 'low', 'close', 'volume'].
+                ['DatetimeIndex', 'Open', 'High', 'Low', 'Close', 'Volume'].
         candle_duration (str): Duration of each OHLC candle (e.g., '1min', '5min').
         avg_freq_per_minute (int): Average number of price points to simulate per minute.
         seed (int): Random seed for reproducibility.
@@ -32,9 +32,9 @@ def generate_price_stream(
         duration = pd.to_timedelta(candle_duration)
 
         # Number of points for this candle
-        n_points = np.random.poisson(
-            avg_freq_per_minute * duration / pd.Timedelta("1min")
-        )
+        minutes = duration.total_seconds() / 60
+        expected_points = avg_freq_per_minute * minutes
+        n_points = np.random.poisson(expected_points)
         n_points = max(n_points, 4)  # ensure at least open, high, low, close
 
         # Generate random timestamps within the candle period

@@ -109,7 +109,7 @@ class SimpleBroker:
         orderbook_item = self.orderbook.get(order.order_id)
 
         # Simulate order execution
-        self.logger.debug("Running order: %s", order)
+        self.logger.info("Running order: %s", order)
 
         # register the order queue with the ticker
         ticker_queue: BroadcastQueue = self.ticker.get_broadcast_queue()
@@ -158,7 +158,7 @@ class SimpleBroker:
                 )
 
             except asyncio.CancelledError:
-                self.logger.debug("Order %s cancelled", order.order_id)
+                self.logger.info("Order %s cancelled", order.order_id)
                 orderbook_item.status = OrderStatus.CANCELLED
                 break
 
@@ -205,7 +205,7 @@ class SimpleBroker:
             status=OrderStatus.TRADED,
         )
         await reply_to.put(order_status_event)
-        self.logger.debug(
+        self.logger.info(
             "Order %s executed, traded %s stocks of %s at price: %s",
             order.order_id,
             order.quantity,

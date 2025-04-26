@@ -2,9 +2,9 @@
 
 from datetime import datetime
 import plotly.graph_objects as go
-from botcoin.data.data_fetcher import HistoricalDataManager
+from botcoin.data.historical import YfDataManager
 
-hdm = HistoricalDataManager(ticker="AAPL")
+hdm = YfDataManager(ticker="AAPL")
 
 # Create a naive datetime
 start = datetime(year=2025, month=4, day=15, hour=0, minute=0, second=0)

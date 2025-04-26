@@ -2,7 +2,7 @@
 
 import asyncio
 
-from botcoin.data.data_fetcher import PriceTicker
+from botcoin.data.tickers import FinnhubTicker
 from botcoin.broker.simulated import SimpleBroker
 
 from botcoin.data.dataclasses import (
@@ -14,7 +14,7 @@ from botcoin.data.dataclasses import (
 )
 
 
-ticker = PriceTicker([])
+ticker = FinnhubTicker([])
 ticker_queue = ticker.get_broadcast_queue()
 
 broker = SimpleBroker(ticker)

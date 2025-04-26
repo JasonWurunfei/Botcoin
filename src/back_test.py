@@ -5,14 +5,14 @@ This script is used to run a backtest using the botcoin framework.
 import asyncio
 from datetime import datetime
 
-from botcoin.data.data_fetcher import PriceTicker
+from botcoin.data.tickers import FinnhubTicker
 from botcoin.broker.simulated import SimpleBroker
 from botcoin.runner import StrategyRunner
 
 from botcoin.data.dataclasses import TickEvent
 
 
-ticker = PriceTicker(["MSTR"])
+ticker = FinnhubTicker(["MSTR"])
 
 broker = SimpleBroker(ticker)
 broker_queue = broker.get_queue()

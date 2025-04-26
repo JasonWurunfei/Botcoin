@@ -11,7 +11,7 @@ from botcoin.data.dataclasses import (
     PlaceOrderEvent,
     OrderStatus,
 )
-from botcoin.data.data_fetcher import PriceTicker
+from botcoin.data.tickers import FinnhubTicker
 from botcoin.utils.message_queue import BroadcastQueue
 from botcoin.data.dataclasses import OrderType, OrderBookItem
 
@@ -27,7 +27,7 @@ class SimpleBroker:
 
     def __init__(
         self,
-        ticker: PriceTicker,
+        ticker: FinnhubTicker,
         broker_queue: Queue = None,
     ) -> None:
         self.broker_queue = broker_queue or Queue()

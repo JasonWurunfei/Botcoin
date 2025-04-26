@@ -5,7 +5,7 @@ from datetime import datetime, timedelta
 
 import pandas as pd
 
-from botcoin.data.data_fetcher import generate_price_stream
+from botcoin.utils.stream_data import generate_price_stream
 
 
 class TestGeneratePriceStream(unittest.TestCase):

@@ -45,3 +45,23 @@ If you use VSCode, you should also set the following variables in the settings.j
     "python.analysis.typeCheckingMode": "basic"
 }
 ```
+
+## Available features
+- [x] Real-time price ticker `botcoin.data.tickers.FinnhubTicker`.
+- [x] Historical data manager `botcoin.data.historical.YfDataManager`.
+    - [x] Manage downloading historical data from Yahoo Finance.
+    - [x] Manage local historical data storage.
+    - [x] Manage historical data retrieval from local storage.
+- [x] Simulated brokerage `botcoin.brokerage.SimpleBroker`.
+    - [x] Simulated order placement.
+    - [x] Simulated order execution.
+        - [x] Simulated market order.
+        - [x] Simulated limit order.
+        - [ ] Simulated stop order.
+    - [x] Simulated order cancellation.
+- [x] Simulated price steam data from OHLC data frame `botcoin.utils.stream_data.generate_price_stream`.
+- [x] FastAPI Interface
+    - [x] utility functions to compute OCO orders.
+    - [ ] interface strategy with FastAPI.
+    - [ ] interface brokerage with FastAPI.
+- [x] Plotly for visualizing the trading strategy.

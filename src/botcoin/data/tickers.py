@@ -212,6 +212,7 @@ class HistoricalTicker:
         """
         Starts the price stream generation for all symbols.
         """
+        self.logger.info("Historical price stream started.")
         tasks = []
         for symbol in self.symbols:
             task = self.stream_symbol(symbol)

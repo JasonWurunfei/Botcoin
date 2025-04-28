@@ -1,8 +1,49 @@
 services:
+
+  rabbitmq:
+    image: rabbitmq:4.1.0-management
+    container_name: rabbitmq
+    ports:
+      - "5672:5672" # Main RabbitMQ port
+      - "15672:15672" # RabbitMQ Management UI
+    environment:
+      - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
+      - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
+    networks:
+      - botcoin
+
+  botcoin_api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    container_name: botcoin_api
+    ports:
+      - "8000:8000" # API port
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+    networks:
+      - botcoin
+
   botcoin:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.botcoin
     container_name: botcoin
-    ports:
-      - "8000:8000"
+    depends_on:
+      - rabbitmq
+    environment:
+      - RABBITMQ_HOST=${RABBITMQ_HOST}
+      - RABBITMQ_PORT=${RABBITMQ_PORT}
+      - RABBITMQ_USER=${RABBITMQ_USER}
+      - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+    networks:
+      - botcoin
+
+networks:
+  botcoin:
+    driver: bridge

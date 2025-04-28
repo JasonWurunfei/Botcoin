@@ -40,7 +40,7 @@ class SimpleBroker:
 
         It runs in an infinite loop, waiting for orders to be placed.
         """
-
+        self.logger.info("Broker started")
         while True:
             evt = await self.broker_queue.get()
             if isinstance(evt, PlaceOrderEvent):

@@ -10,6 +10,8 @@ from typing import Callable
 from dotenv import load_dotenv
 import aio_pika
 
+from botcoin.utils.log import logging
+
 
 load_dotenv()
 RABBITMQ_USER: str = os.getenv("RABBITMQ_USER")
@@ -23,6 +25,8 @@ class RabbitMQAdapterWorker:
     This class is a adapter for the RabbitMQ worker process.
     It manages the worker process and allows for tasks to be added to it.
     """
+
+    logger = logging.getLogger(__qualname__)
 
     def __init__(self) -> None:
         self.rabbitmq_url = RABBITMQ_URL
@@ -45,7 +49,13 @@ class RabbitMQAdapterWorker:
         It sets up the asyncio event loop and starts the worker function.
         """
         tasks = self._worker_tasks()
-        await asyncio.gather(*tasks, return_exceptions=True)
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                self.logger.error("Task failed with exception: %s", result)
+            else:
+                self.logger.info("Task completed with result: %s", result)
 
     def _worker_tasks(self) -> asyncio.Future:
         """
@@ -101,7 +111,13 @@ class RabbitMQAdapterWorker:
             task.cancel()
 
         # Wait for all tasks to complete or cancel
-        await asyncio.gather(*self.tasks, return_exceptions=True)
+        results = await asyncio.gather(*self.tasks, return_exceptions=True)
+
+        for result in results:
+            if isinstance(result, Exception):
+                self.logger.error("Task failed with exception: %s", result)
+            else:
+                self.logger.info("Task completed with result: %s", result)
 
     async def start_tasks(self) -> None:
         """

@@ -21,6 +21,7 @@ RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
 RABBITMQ_PASS = os.getenv("RABBITMQ_PASSWORD", "guest")
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
+RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "botcoin")
 RABBITMQ_URL: str = (
     f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}:{RABBITMQ_PORT}"
 )
@@ -109,7 +110,7 @@ async def start_practice() -> dict:
     connection = await aio_pika.connect_robust(RABBITMQ_URL)
     async with connection:
         channel = await connection.channel()  # Creating a channel
-        queue = await channel.declare_queue("botcoin", durable=True)
+        exchange = await channel.get_exchange(RABBITMQ_EXCHANGE)
 
         body = StartEvent().to_json()
 
@@ -118,7 +119,7 @@ async def start_practice() -> dict:
             delivery_mode=aio_pika.DeliveryMode.PERSISTENT,  # Ensures the message is saved in case of RabbitMQ restart
         )
 
-        await channel.default_exchange.publish(message, routing_key=queue.name)
+        await exchange.publish(message, routing_key="")
 
     return {
         "message": "Practice session started",
@@ -137,7 +138,7 @@ async def stop_practice() -> dict:
     connection = await aio_pika.connect_robust(RABBITMQ_URL)
     async with connection:
         channel = await connection.channel()  # Creating a channel
-        queue = await channel.declare_queue("botcoin", durable=True)
+        exchange = await channel.get_exchange(RABBITMQ_EXCHANGE)
 
         body = StopEvent().to_json()
 
@@ -146,7 +147,7 @@ async def stop_practice() -> dict:
             delivery_mode=aio_pika.DeliveryMode.PERSISTENT,  # Ensures the message is saved in case of RabbitMQ restart
         )
 
-        await channel.default_exchange.publish(message, routing_key=queue.name)
+        await exchange.publish(message, routing_key="")
 
     return {
         "message": "Practice session stopped",

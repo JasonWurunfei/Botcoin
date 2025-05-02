@@ -27,6 +27,7 @@ class AsyncEventWorker:
         rabbitmq_pass: str,
         rabbitmq_host: str,
         rabbitmq_qname: str,
+        rabbitmq_exchange: str,
         rabbitmq_port: int = 5672,
     ) -> None:
         self.rabbitmq_user = rabbitmq_user
@@ -34,6 +35,7 @@ class AsyncEventWorker:
         self.rabbitmq_host = rabbitmq_host
         self.rabbitmq_port = rabbitmq_port
         self.rabbitmq_qname = rabbitmq_qname
+        self.rabbitmq_exchange = rabbitmq_exchange
         self.coroutines = []
         self.tasks = []
         self.events = {}
@@ -118,7 +120,7 @@ class AsyncEventWorker:
     async def _daemonize(self) -> None:
         """
         This function is run in the worker process.
-        It listens for events from rabbitmq and broadcasts them to the worker process.
+        It listens for events from a fanout exchange in RabbitMQ and broadcasts them to the worker process.
         """
 
         # Connect to RabbitMQ server
@@ -134,9 +136,15 @@ class AsyncEventWorker:
             self.rabbitmq_port,
         )
 
-        # Create a channel and declare a queue
+        # Create a channel and declare the exchange and queue
         channel = await connection.channel()
+
+        exchange = await channel.declare_exchange(
+            self.rabbitmq_exchange, aio_pika.ExchangeType.FANOUT, durable=True
+        )
+
         queue = await channel.declare_queue(self.rabbitmq_qname, durable=True)
+        await queue.bind(exchange)
 
         # Listen for messages in the queue
         async with queue.iterator() as queue_iter:

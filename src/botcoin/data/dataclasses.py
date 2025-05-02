@@ -1,6 +1,5 @@
 """This module contains the data classes used in the botcoin framework."""
 
-import json
 from dataclasses import dataclass, field
 from typing import Union
 from datetime import datetime

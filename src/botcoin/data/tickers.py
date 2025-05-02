@@ -59,9 +59,12 @@ class FinnhubTicker:
                     await self._subscribe(ws)
                     self.logger.info("WebSocket connection established.")
 
-                    while True:
-                        message = await ws.recv()
-                        await self._handle_message(message)
+                    async for message in ws:
+                        json_message = json.loads(message)
+                        await self._handle_message(json_message)
+
+            except (json.JSONDecodeError, KeyError, TypeError) as e:
+                self.logger.warning("Failed to parse message: %s", e)
 
             except websockets.ConnectionClosed:
                 self.logger.warning(
@@ -119,21 +122,18 @@ class FinnhubTicker:
             self.logger.error("WebSocket connection error: %s", e)
             return
 
-    async def _handle_message(self, message: str):
+    async def _handle_message(self, message: dict):
         """
         Handles incoming WebSocket messages.
         """
-        try:
-            msg = json.loads(message)
-            records = msg.get("data", None)
-            if records:
-                for record in records:
-                    t = datetime.fromtimestamp(record["t"] / 1000, tz=self.tz)
-                    p = float(record["p"])
-                    s = record["s"]
-                    await self.on_message(s, t, p)
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            self.logger.warning("Failed to parse message: %s", e)
+
+        records = message.get("data", None)
+        if records:
+            for record in records:
+                t = datetime.fromtimestamp(record["t"] / 1000, tz=self.tz)
+                p = float(record["p"])
+                s = record["s"]
+                await self.on_message(s, t, p)
 
     async def on_message(self, s: str, t: datetime, p: float):
         """

@@ -1,10 +1,7 @@
-FROM python:3.13.2-slim
+FROM python:3.13-alpine
 
-# Keeps Python from generating .pyc files in the container
-ENV PYTHONDONTWRITEBYTECODE=1
-
-# Turns off buffering for easier container logging
-ENV PYTHONUNBUFFERED=1
+# Install required Alpine packages
+RUN apk add --no-cache bash dos2unix
 
 # Install pip requirements
 COPY requirements.api.txt .
@@ -14,7 +11,12 @@ RUN python -m pip install --upgrade pip && \
 WORKDIR /app
 COPY . /app
 
+# Fix line endings for wait-for-it.sh and wait-rabbitmq.sh
+RUN dos2unix ./wait-for-it.sh ./wait-rabbitmq.sh
+
+# Make wait-for-it.sh and wait-rabbitmq.sh executable
 RUN chmod +x ./wait-for-it.sh ./wait-rabbitmq.sh
+
 ENTRYPOINT [ "/app/wait-rabbitmq.sh" ]
 
 WORKDIR /app/src

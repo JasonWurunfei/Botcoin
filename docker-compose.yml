@@ -4,8 +4,8 @@ services:
     image: rabbitmq:4.1.0-management
     container_name: rabbitmq
     ports:
-      - "5672:5672" # Main RabbitMQ port
-      - "15672:15672" # RabbitMQ Management UI
+      - "5672:5672"
+      - "15672:15672"
     environment:
       - RABBITMQ_DEFAULT_USER=${RABBITMQ_USER}
       - RABBITMQ_DEFAULT_PASS=${RABBITMQ_PASSWORD}
@@ -18,7 +18,7 @@ services:
       dockerfile: Dockerfile.api
     container_name: botcoin_api
     ports:
-      - "8000:8000" # API port
+      - "8000:8000"
     depends_on:
       - rabbitmq
     environment:

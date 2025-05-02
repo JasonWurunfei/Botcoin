@@ -4,6 +4,7 @@ import os
 import json
 import asyncio
 from datetime import datetime
+from typing import Optional
 
 import pytz
 import websockets
@@ -32,8 +33,8 @@ class FinnhubTicker:
     def __init__(
         self,
         tz: str = "US/Eastern",
-        symbols: list[str] = None,
-        tick_broadcast: BroadcastQueue = None,
+        symbols: Optional[list[str]] = None,
+        tick_broadcast: Optional[BroadcastQueue] = None,
     ):
         self.symbols = symbols or []
         self.tz = pytz.timezone(tz)
@@ -41,7 +42,7 @@ class FinnhubTicker:
         self.tick_queue = tick_broadcast or BroadcastQueue()
         self.ws = None
 
-    def stream(self) -> None:
+    def stream(self) -> asyncio.Task:
         """
         Starts the WebSocket connection and begins streaming price data.
         """

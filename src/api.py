@@ -3,6 +3,7 @@
 # import uuid
 import os
 import json
+from dataclasses import asdict
 
 # from dataclasses import asdict
 
@@ -12,13 +13,17 @@ from fastapi import FastAPI
 from dotenv import load_dotenv
 
 from botcoin.cost.trade import CommissionTradeCost
+from botcoin.data.dataclasses import StartEvent, StopEvent
 
 
 load_dotenv()
-RABBITMQ_USER: str = os.getenv("RABBITMQ_USER")
-RABBITMQ_PASSWORD: str = os.getenv("RABBITMQ_PASSWORD")
-RABBITMQ_HOST: str = os.getenv("RABBITMQ_HOST")
-RABBITMQ_URL: str = f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASSWORD}@{RABBITMQ_HOST}/"
+RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
+RABBITMQ_PASS = os.getenv("RABBITMQ_PASSWORD", "guest")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
+RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
+RABBITMQ_URL: str = (
+    f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}:{RABBITMQ_PORT}"
+)
 
 DESC = """
 Botcoint. 🚀
@@ -106,9 +111,7 @@ async def start_practice() -> dict:
         channel = await connection.channel()  # Creating a channel
         queue = await channel.declare_queue("botcoin", durable=True)
 
-        body = {
-            "command": "start",
-        }
+        body = StartEvent().to_json()
 
         message = aio_pika.Message(
             body=json.dumps(body).encode(),
@@ -136,9 +139,7 @@ async def stop_practice() -> dict:
         channel = await connection.channel()  # Creating a channel
         queue = await channel.declare_queue("botcoin", durable=True)
 
-        body = {
-            "command": "stop",
-        }
+        body = StopEvent().to_json()
 
         message = aio_pika.Message(
             body=json.dumps(body).encode(),

@@ -1,5 +1,6 @@
 """This module contains the data classes used in the botcoin framework."""
 
+import json
 from dataclasses import dataclass, field
 from typing import Union
 from datetime import datetime
@@ -39,13 +40,72 @@ class TickEvent(Event):
     event_type: str = "tick"
     symbol: str
     price: float
-    event_time: datetime
 
     def __repr__(self):
         return (
             f"TickEvent(symbol={self.symbol}, price={self.price}, "
             + f"event_time={self.event_time.isoformat()})"
         )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class StartEvent(Event):
+    """
+    Represents the start event for async event workers
+    """
+
+    event_type: str = "start"
+
+    def __repr__(self):
+        return f"StartEvent(event_time={self.event_time.isoformat()})"
+
+    def to_json(self):
+        """
+        Convert the event to a JSON serializable format.
+        """
+        return {
+            "event_type": self.event_type,
+            "event_time": self.event_time.isoformat(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        """
+        Convert JSON data to an event object.
+        """
+        event_type = json_data.get("event_type")
+        event_time = datetime.fromisoformat(json_data.get("event_time"))
+        return StartEvent(event_type=event_type, event_time=event_time)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class StopEvent(Event):
+    """
+    Represents the stop event for async event workers
+    """
+
+    event_type: str = "stop"
+
+    def __repr__(self):
+        return f"StopEvent(event_time={self.event_time.isoformat()})"
+
+    def to_json(self):
+        """
+        Convert the event to a JSON serializable format.
+        """
+        return {
+            "event_type": self.event_type,
+            "event_time": self.event_time.isoformat(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        """
+        Convert JSON data to an event object.
+        """
+        event_type = json_data.get("event_type")
+        event_time = datetime.fromisoformat(json_data.get("event_time"))
+        return StopEvent(event_type=event_type, event_time=event_time)
 
 
 class OrderStatus(Enum):
@@ -83,7 +143,6 @@ class Order:
     symbol: str
     quantity: int
     direction: str  # 'buy' or 'sell'
-    order_type: OrderType = None
     timestamp: datetime = field(default_factory=now_us_east)
 
     def __post_init__(self):

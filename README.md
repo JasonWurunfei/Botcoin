@@ -46,6 +46,25 @@ If you use VSCode, you should also set the following variables in the settings.j
 }
 ```
 
+## Run Botcoin API
+### Environment variables
+You need to set the following environment variables in `.env` file.
+
+```.env
+# RabbitMQ
+RABBITMQ_HOST=rabbitmq
+RABBITMQ_PORT=5672
+RABBITMQ_USER=guest
+RABBITMQ_PASSWORD=guest
+RABBITMQ_EXCHANGE=botcoin
+```
+
+Then you can use docekr compose to run the Botcoin API.
+
+```bash
+docker-compose up -d
+```
+
 ## Available features
 - [x] Real-time price ticker `botcoin.data.tickers.FinnhubTicker`.
 - [x] Historical data manager `botcoin.data.historical.YfDataManager`.

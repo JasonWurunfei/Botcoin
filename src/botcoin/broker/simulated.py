@@ -5,15 +5,13 @@ from asyncio import Queue
 
 
 from botcoin.utils.log import logging
-from botcoin.data.dataclasses import (
-    Order,
+from botcoin.data.dataclasses.order import Order, OrderType, OrderStatus, OrderBookItem
+from botcoin.data.dataclasses.events import (
     OrderStatusEvent,
     PlaceOrderEvent,
-    OrderStatus,
 )
 from botcoin.data.tickers import FinnhubTicker
 from botcoin.utils.message_queue import BroadcastQueue
-from botcoin.data.dataclasses import OrderType, OrderBookItem
 
 
 class SimpleBroker:

@@ -15,7 +15,7 @@ from botcoin.utils.log import logging
 from botcoin.utils.message_queue import BroadcastQueue
 from botcoin.utils.stream_data import generate_price_stream
 
-from botcoin.data.dataclasses import TickEvent
+from botcoin.data.dataclasses.events import TickEvent
 from botcoin.data.historical import YfDataManager
 
 

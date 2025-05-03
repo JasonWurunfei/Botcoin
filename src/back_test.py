@@ -9,7 +9,7 @@ from botcoin.data.tickers import FinnhubTicker
 from botcoin.broker.simulated import SimpleBroker
 from botcoin.runner import StrategyRunner
 
-from botcoin.data.dataclasses import TickEvent
+from botcoin.data.dataclasses.events import TickEvent
 
 
 ticker = FinnhubTicker(["MSTR"])

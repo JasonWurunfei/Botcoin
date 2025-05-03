@@ -5,7 +5,7 @@ from asyncio import Queue
 
 
 from botcoin.utils.log import logging
-from botcoin.data.dataclasses import (
+from botcoin.data.dataclasses.events import (
     Event,
     TickEvent,
     MarketOrder,

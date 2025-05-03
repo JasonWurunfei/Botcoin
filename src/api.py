@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from dotenv import load_dotenv
 
 from botcoin.cost.trade import CommissionTradeCost
-from botcoin.data.dataclasses import StartEvent, StopEvent
+from botcoin.data.dataclasses.events import StartEvent, StopEvent
 
 
 load_dotenv()

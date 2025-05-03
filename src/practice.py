@@ -7,7 +7,8 @@ from datetime import datetime
 from botcoin.data.tickers import HistoricalTicker
 from botcoin.broker.simulated import SimpleBroker
 
-from botcoin.data.dataclasses import MarketOrder, LimitOrder, PlaceOrderEvent
+from botcoin.data.dataclasses.order import MarketOrder, LimitOrder
+from botcoin.data.dataclasses.events import PlaceOrderEvent
 
 SYMBOL = "AAPL"  # Example symbol, replace with your desired stock symbol
 

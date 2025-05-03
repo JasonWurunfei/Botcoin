@@ -9,7 +9,7 @@ from typing import Callable, Coroutine, Any
 import aio_pika
 
 from botcoin.utils.log import logging
-from botcoin.data.dataclasses import Event
+from botcoin.data.dataclasses.events import Event
 from botcoin.utils.message_queue import BroadcastQueue
 
 

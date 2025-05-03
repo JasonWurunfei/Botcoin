@@ -17,18 +17,13 @@ RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "botcoin")
 
-start = datetime(year=2025, month=4, day=25, hour=9, minute=30, second=10)
-end = datetime(year=2025, month=4, day=25, hour=15, minute=59, second=55)
-ticker = HistoricalTicker(
-    symbols=["AAPL"], start_date=start, end_date=end, real_time=True
-)
-
 
 async def main():
     """
     Main function to start the Botcoin application.
     """
 
+    # Initialize the worker
     worker = AsyncEventWorker(
         rabbitmq_user=RABBITMQ_USER,
         rabbitmq_pass=RABBITMQ_PASS,
@@ -37,15 +32,20 @@ async def main():
         rabbitmq_exchange=RABBITMQ_EXCHANGE,
         rabbitmq_port=RABBITMQ_PORT,
     )
-    event_queue = asyncio.Queue()
-    worker.add_coroutine(coro=ticker.stream, event_queue=event_queue)
-    asyncio.create_task(worker.start())
 
-    # Wait for the event queue to be filled with events
-    while True:
-        event = await event_queue.get()
-        print(f"Received event: {event}")
-        event_queue.task_done()
+    # Define the service to be run
+    start = datetime(year=2025, month=4, day=25, hour=9, minute=30, second=10)
+    end = datetime(year=2025, month=4, day=25, hour=15, minute=59, second=55)
+    ticker = HistoricalTicker(
+        symbols=["AAPL"], start_date=start, end_date=end, real_time=True
+    )
+
+    # Register the ticker service with the worker
+    ticker_queue = asyncio.Queue()
+    worker.add_coroutine(coro=ticker.stream, event_queue=ticker_queue)
+
+    # Start the worker
+    await worker.start()
 
 
 if __name__ == "__main__":

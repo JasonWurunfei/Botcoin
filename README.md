@@ -51,6 +51,11 @@ If you use VSCode, you should also set the following variables in the settings.j
 You need to set the following environment variables in `.env` file.
 
 ```.env
+# FastAPI
+FastAPI_HOST=0.0.0.0
+FastAPI_PORT=8000
+FastAPI_WORKERS=1
+
 # RabbitMQ
 RABBITMQ_HOST=rabbitmq
 RABBITMQ_PORT=5672

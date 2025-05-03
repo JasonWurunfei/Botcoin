@@ -1,6 +1,5 @@
 """This script is used to interact with botcoin runner"""
 
-# import uuid
 import os
 import json
 
@@ -113,7 +112,7 @@ async def start_practice() -> dict:
 
         message = aio_pika.Message(
             body=json.dumps(body).encode(),
-            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,  # Ensures the message is saved in case of RabbitMQ restart
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         )
 
         await exchange.publish(message, routing_key="")
@@ -141,7 +140,7 @@ async def stop_practice() -> dict:
 
         message = aio_pika.Message(
             body=json.dumps(body).encode(),
-            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,  # Ensures the message is saved in case of RabbitMQ restart
+            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
         )
 
         await exchange.publish(message, routing_key="")
@@ -151,87 +150,11 @@ async def stop_practice() -> dict:
     }
 
 
-# @app.get("/practice/historical/order/market")
-# async def place_order(
-#     symbol: str,
-#     direction: str,
-#     quantity: int,
-# ) -> dict:
-#     """
-#     Place a market order.
-
-#     Args:
-#         symbol (str): The stock symbol.
-#         direction (str): The direction of the order (buy/sell).
-#         quantity (int): The quantity of shares.
-
-#     Returns:
-#         dict: A message indicating that the order has been placed.
-#     """
-
-#     order = MarketOrder(
-#         order_id=str(uuid.uuid4()),
-#         symbol=symbol,
-#         quantity=quantity,
-#         direction=direction,
-#     )
-#     order_event = PlaceOrderEvent(order=order, reply_to=server_queue)
-#     print("1")
-#     await broker_queue.put(order_event)
-#     print("2")
-#     order_status_event = await server_queue.get()
-#     print("3")
-#     orderbook[order.order_id] = {
-#         "order": asdict(order),
-#         "status": order_status_event.status,
-#     }
-#     server_queue.task_done()
-#     return asdict(order_status_event)
-
-
-# @app.get("/practice/historical/order/limit")
-# async def place_limit_order(
-#     symbol: str,
-#     direction: str,
-#     quantity: int,
-#     limit_price: float,
-# ) -> dict:
-#     """
-#     Place a limit order.
-
-#     Args:
-#         symbol (str): The stock symbol.
-#         direction (str): The direction of the order (buy/sell).
-#         quantity (int): The quantity of shares.
-#         limit_price (float): The limit price for the order.
-
-#     Returns:
-#         dict: A message indicating that the order has been placed.
-#     """
-
-#     order = LimitOrder(
-#         order_id=str(uuid.uuid4()),
-#         symbol=symbol,
-#         quantity=quantity,
-#         direction=direction,
-#         limit_price=limit_price,
-#     )
-#     order_event = PlaceOrderEvent(order=order, reply_to=server_queue)
-#     await broker_queue.put(order_event)
-#     order_status_event = await server_queue.get()
-#     orderbook[order.order_id] = {
-#         "order": asdict(order),
-#         "status": order_status_event.status,
-#     }
-#     server_queue.task_done()
-#     return asdict(order_status_event)
-
-
 if __name__ == "__main__":
     try:
-        host = os.getenv("HOST", "0.0.0.0")
-        port = int(os.getenv("PORT", "8000"))
-        workers = int(os.getenv("WORKERS", "1"))
+        host = os.getenv("FastAPI_HOST", "0.0.0.0")
+        port = int(os.getenv("FastAPI_PORT", "8000"))
+        workers = int(os.getenv("FastAPI_WORKERS", "1"))
         uvicorn.run(app, host=host, port=port, workers=workers)
     except KeyboardInterrupt:
         print("Server stopped by user.")

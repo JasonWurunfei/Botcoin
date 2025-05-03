@@ -2,13 +2,13 @@
 
 import os
 import asyncio
-from datetime import datetime
 
 from dotenv import load_dotenv
 
 from botcoin.utils.rabbitmq.worker import AsyncEventWorker
 
-from botcoin.data.tickers import HistoricalTicker
+from botcoin.data.tickers import FakeTicker
+from botcoin.data.dataclasses.events import Event, RequestTickEvent
 
 load_dotenv()
 RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
@@ -24,7 +24,9 @@ async def main():
     """
 
     # Initialize the worker
+    worker_queue = asyncio.Queue()
     worker = AsyncEventWorker(
+        worker_queue=worker_queue,
         rabbitmq_user=RABBITMQ_USER,
         rabbitmq_pass=RABBITMQ_PASS,
         rabbitmq_host=RABBITMQ_HOST,
@@ -34,18 +36,20 @@ async def main():
     )
 
     # Define the service to be run
-    start = datetime(year=2025, month=4, day=25, hour=9, minute=30, second=10)
-    end = datetime(year=2025, month=4, day=25, hour=15, minute=59, second=55)
-    ticker = HistoricalTicker(
-        symbols=["AAPL"], start_date=start, end_date=end, real_time=True
-    )
+    ticker = FakeTicker()
 
     # Register the ticker service with the worker
-    ticker_queue = asyncio.Queue()
-    worker.add_coroutine(coro=ticker.stream, event_queue=ticker_queue)
+    worker.add_coroutine(coro=ticker.start)
+    worker.subscribe_event(RequestTickEvent)
 
     # Start the worker
-    await worker.start()
+    asyncio.create_task(worker.start())
+
+    # Listen for events
+    while True:
+        event = await worker.worker_queue.get()
+        if isinstance(event, RequestTickEvent):
+            await ticker.subscribe(event.symbol)
 
 
 if __name__ == "__main__":

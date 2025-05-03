@@ -2,6 +2,7 @@
 
 import os
 import json
+import random
 import asyncio
 from datetime import datetime
 from typing import Optional
@@ -17,6 +18,9 @@ from botcoin.utils.stream_data import generate_price_stream
 
 from botcoin.data.dataclasses.events import TickEvent
 from botcoin.data.historical import YfDataManager
+
+from botcoin.utils.rabbitmq.conn import new_connection
+from botcoin.utils.rabbitmq.event import emit_event_with_channel
 
 
 # Load variables from .env file into environment
@@ -288,3 +292,109 @@ class HistoricalTicker:
         Returns the broadcast queue for price ticks.
         """
         return self.tick_queue
+
+
+class Ticker:
+    """
+    A class to manage and fetch real-time price data for a list of stock symbols.
+    """
+
+    async def subscribe(self, symbol: str) -> None:
+        """
+        Subscribes to a new ticker symbol.
+        """
+        raise NotImplementedError("This method should be implemented in subclasses.")
+
+    async def unsubscribe(self, symbol: str) -> None:
+        """
+        Unsubscribes from a symbol symbol.
+        """
+        raise NotImplementedError("This method should be implemented in subclasses.")
+
+    async def start(self):
+        """
+        Starts the ticker service.
+        """
+        raise NotImplementedError("This method should be implemented in subclasses.")
+
+    async def stop(self):
+        """
+        Stops the ticker service.
+        """
+        raise NotImplementedError("This method should be implemented in subclasses.")
+
+
+class FakeTicker:
+    """
+    A class to manage and fetch fake price data for a list of stock symbols.
+    """
+
+    logger = logging.getLogger(__qualname__)
+
+    def __init__(self, tz: str = "US/Eastern"):
+        self.tz = pytz.timezone(tz)
+        self.symbols = set()
+        self.rabbitmq_conn = None
+        self.rabbitmq_channel = None
+
+    async def subscribe(self, symbol: str) -> None:
+        """
+        Subscribes to a new ticker symbol.
+        """
+        self.symbols.add(symbol)
+        self.logger.info("Subscribed to %s", symbol)
+
+    async def unsubscribe(self, symbol: str) -> None:
+        """
+        Unsubscribes from a symbol.
+        """
+        if symbol in self.symbols:
+            self.symbols.remove(symbol)
+            self.logger.info("Unsubscribed from %s", symbol)
+        else:
+            self.logger.warning("Symbol %s not found in subscribed symbols.", symbol)
+
+    async def start(self) -> None:
+        """
+        Starts the ticker service.
+        """
+        try:
+            self.logger.info("Fake ticker started.")
+            self.rabbitmq_conn = await new_connection()
+            self.rabbitmq_channel = await self.rabbitmq_conn.channel()
+            while True:
+                if not self.symbols:
+                    await asyncio.sleep(0.1)
+                    continue
+
+                # Randomly pick a symbol and generate a fake price
+                symbol = random.choice(list(self.symbols))
+                price = random.uniform(100, 200)
+
+                tick_evt = TickEvent(
+                    symbol=symbol,
+                    price=price,
+                )
+
+                self.logger.info(tick_evt)
+                await emit_event_with_channel(tick_evt, self.rabbitmq_channel)
+                await asyncio.sleep(1)
+
+        finally:
+            await self.stop()
+
+    async def stop(self) -> None:
+        """
+        Stops the ticker service and closes RabbitMQ resources.
+        """
+        if self.rabbitmq_channel and not self.rabbitmq_channel.is_closed:
+            await self.rabbitmq_channel.close()
+            self.logger.debug("RabbitMQ channel closed.")
+        self.rabbitmq_channel = None
+
+        if self.rabbitmq_conn and not self.rabbitmq_conn.is_closed:
+            await self.rabbitmq_conn.close()
+            self.logger.debug("RabbitMQ connection closed.")
+        self.rabbitmq_conn = None
+
+        self.logger.info("Fake ticker stopped.")

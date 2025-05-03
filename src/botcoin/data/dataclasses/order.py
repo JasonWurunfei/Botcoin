@@ -59,6 +59,19 @@ class Order:
         if self.quantity <= 0:
             raise ValueError(f"Quantity must be greater than zero: {self.quantity}")
 
+    def to_json(self):
+        """
+        Convert the order to a JSON serializable format.
+        """
+        raise NotImplementedError("Subclasses must implement to_json method")
+
+    @classmethod
+    def from_json(cls, json_data):
+        """
+        Convert JSON data to an order object.
+        """
+        raise NotImplementedError("Subclasses must implement from_json method")
+
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class MarketOrder(Order):
@@ -73,6 +86,26 @@ class MarketOrder(Order):
         return (
             f"MarketOrder(order_id={self.order_id}, symbol={self.symbol},"
             + f" quantity={self.quantity}, direction={self.direction})"
+        )
+
+    def to_json(self):
+        return {
+            "order_type": self.order_type.value,
+            "order_id": self.order_id,
+            "symbol": self.symbol,
+            "quantity": self.quantity,
+            "direction": self.direction,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        return cls(
+            order_id=json_data["order_id"],
+            symbol=json_data["symbol"],
+            quantity=json_data["quantity"],
+            direction=json_data["direction"],
+            timestamp=datetime.fromisoformat(json_data["timestamp"]),
         )
 
 
@@ -101,6 +134,28 @@ class LimitOrder(Order):
             f"LimitOrder(order_id={self.order_id}, symbol={self.symbol}, "
             + f"quantity={self.quantity}, direction={self.direction}, "
             + f"limit_price={self.limit_price})"
+        )
+
+    def to_json(self):
+        return {
+            "order_type": self.order_type.value,
+            "order_id": self.order_id,
+            "symbol": self.symbol,
+            "quantity": self.quantity,
+            "direction": self.direction,
+            "limit_price": self.limit_price,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        return cls(
+            order_id=json_data["order_id"],
+            symbol=json_data["symbol"],
+            quantity=json_data["quantity"],
+            direction=json_data["direction"],
+            limit_price=json_data["limit_price"],
+            timestamp=datetime.fromisoformat(json_data["timestamp"]),
         )
 
 
@@ -133,6 +188,30 @@ class OcoOrder(Order):
             f"OcoOrder(order_id={self.order_id}, symbol={self.symbol}, "
             + f"quantity={self.quantity}, direction={self.direction}, "
             + f"limit_price={self.limit_price}, stop_price={self.stop_price})"
+        )
+
+    def to_json(self):
+        return {
+            "order_type": self.order_type.value,
+            "order_id": self.order_id,
+            "symbol": self.symbol,
+            "quantity": self.quantity,
+            "direction": self.direction,
+            "limit_price": self.limit_price,
+            "stop_price": self.stop_price,
+            "timestamp": self.timestamp.isoformat(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        return cls(
+            order_id=json_data["order_id"],
+            symbol=json_data["symbol"],
+            quantity=json_data["quantity"],
+            direction=json_data["direction"],
+            limit_price=json_data["limit_price"],
+            stop_price=json_data["stop_price"],
+            timestamp=datetime.fromisoformat(json_data["timestamp"]),
         )
 
 

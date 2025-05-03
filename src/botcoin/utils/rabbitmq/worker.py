@@ -4,13 +4,12 @@ This module manages a RabbitMQ async worker process for the botcoin framework.
 
 import json
 import asyncio
-from typing import Callable, Coroutine, Any
+from typing import Callable, Coroutine, Any, Type
 
 import aio_pika
 
 from botcoin.utils.log import logging
 from botcoin.data.dataclasses.events import Event
-from botcoin.utils.message_queue import BroadcastQueue
 
 
 class AsyncEventWorker:
@@ -23,6 +22,7 @@ class AsyncEventWorker:
 
     def __init__(
         self,
+        worker_queue: asyncio.Queue,
         rabbitmq_user: str,
         rabbitmq_pass: str,
         rabbitmq_host: str,
@@ -39,13 +39,12 @@ class AsyncEventWorker:
         self.coroutines = []
         self.tasks = []
         self.events = {}
-        self.broadcast_queue = BroadcastQueue()
+        self.worker_queue = worker_queue or asyncio.Queue()
         self.status = "stopped"
 
     def add_coroutine(
         self,
         coro: Callable[..., Coroutine[Any, Any, Any]],
-        event_queue: asyncio.Queue,
         *args,
     ) -> None:
         """
@@ -58,7 +57,6 @@ class AsyncEventWorker:
 
         async def wrapper():
             try:
-                self.broadcast_queue.register(event_queue)
                 return await coro(*args)
             except Exception as e:
                 self.logger.error("Error in coroutine: %s", e)
@@ -103,17 +101,16 @@ class AsyncEventWorker:
                 self.logger.info("Task completed with result: %s", result)
         self.status = "stopped"
 
-    def add_event(self, event_type: str, event_factory: Callable[..., Event]) -> None:
+    def subscribe_event(self, event_class: Type[Event]) -> None:
         """
-        Register a event to monitor in the worker process.
+        Subscribe a event to monitor in the worker process.
 
         Args:
-            event_type: The type of the event to be registered.
-            event_factory: The factory function to create the event.
+            event_class: The event class to be registered.
         """
-        if event_type not in self.events:
-            self.events[event_type] = event_factory
-            self.logger.info("Event registered: %s", event_type)
+        if event_class.event_type not in self.events:
+            self.events[event_class.event_type] = event_class
+            self.logger.info("Event registered: %s", event_class.event_type)
 
     def remove_event(self, event_type: str) -> None:
         """
@@ -131,7 +128,8 @@ class AsyncEventWorker:
     async def _daemonize(self) -> None:
         """
         This function is run in the worker process.
-        It listens for events from a fanout exchange in RabbitMQ and broadcasts them to the worker process.
+        It listens for events from a fanout exchange in RabbitMQ and broadcasts
+        them to the worker process.
         """
 
         # Connect to RabbitMQ server
@@ -181,7 +179,7 @@ class AsyncEventWorker:
                     elif event_type in self.events:
                         event = self.events[event_type].from_json(body)
                         self.logger.info("Received event: %s", event)
-                        await self.broadcast_queue.publish(event)
+                        await self.worker_queue.put(event)
                     else:
                         self.logger.warning("Unknown event type: %s", event_type)
 

@@ -1,26 +1,19 @@
 """This script is used to interact with botcoin runner"""
 
 import os
-import json
+from datetime import datetime
 
 import uvicorn
-import aio_pika
 from fastapi import FastAPI
 from dotenv import load_dotenv
 
 from botcoin.cost.trade import CommissionTradeCost
-from botcoin.data.dataclasses.events import StartEvent, StopEvent
+from botcoin.data.dataclasses.events import StartEvent, StopEvent, RequestTickEvent
+from botcoin.utils.rabbitmq.event import emit_event
 
 
 load_dotenv()
-RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
-RABBITMQ_PASS = os.getenv("RABBITMQ_PASSWORD", "guest")
-RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
-RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
-RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "botcoin")
-RABBITMQ_URL: str = (
-    f"amqp://{RABBITMQ_USER}:{RABBITMQ_PASS}@{RABBITMQ_HOST}:{RABBITMQ_PORT}"
-)
+
 
 DESC = """
 Botcoint. 🚀
@@ -87,6 +80,24 @@ def risk_sell(
     }
 
 
+@app.get("/ticker/start")
+async def start_ticker(symbol: str) -> dict:
+    """
+    Start the ticker for a given symbol.
+
+    Args:
+        symbol (str): The symbol to start the ticker for.
+
+    Returns:
+        dict: A message indicating that the ticker has started.
+    """
+    await emit_event(RequestTickEvent(symbol=symbol))
+
+    return {
+        "message": f"Ticker started for {symbol}",
+    }
+
+
 @app.get("/practice/historical/start")
 async def start_practice() -> dict:
     # async def start_practice(start_date: str, end_date: str) -> dict:
@@ -103,19 +114,7 @@ async def start_practice() -> dict:
         dict: A message indicating that the practice session has started.
     """
 
-    connection = await aio_pika.connect_robust(RABBITMQ_URL)
-    async with connection:
-        channel = await connection.channel()  # Creating a channel
-        exchange = await channel.get_exchange(RABBITMQ_EXCHANGE)
-
-        body = StartEvent().to_json()
-
-        message = aio_pika.Message(
-            body=json.dumps(body).encode(),
-            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-        )
-
-        await exchange.publish(message, routing_key="")
+    await emit_event(StartEvent())
 
     return {
         "message": "Practice session started",
@@ -131,19 +130,7 @@ async def stop_practice() -> dict:
         dict: A message indicating that the practice session has stopped.
     """
 
-    connection = await aio_pika.connect_robust(RABBITMQ_URL)
-    async with connection:
-        channel = await connection.channel()  # Creating a channel
-        exchange = await channel.get_exchange(RABBITMQ_EXCHANGE)
-
-        body = StopEvent().to_json()
-
-        message = aio_pika.Message(
-            body=json.dumps(body).encode(),
-            delivery_mode=aio_pika.DeliveryMode.PERSISTENT,
-        )
-
-        await exchange.publish(message, routing_key="")
+    await emit_event(StopEvent())
 
     return {
         "message": "Practice session stopped",

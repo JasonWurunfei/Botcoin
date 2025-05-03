@@ -23,8 +23,12 @@ ticker = HistoricalTicker(
     symbols=["AAPL"], start_date=start, end_date=end, real_time=True
 )
 
-if __name__ == "__main__":
-    # Start the RabbitMQ worker process
+
+async def main():
+    """
+    Main function to start the Botcoin application.
+    """
+
     worker = AsyncEventWorker(
         rabbitmq_user=RABBITMQ_USER,
         rabbitmq_pass=RABBITMQ_PASS,
@@ -33,6 +37,16 @@ if __name__ == "__main__":
         rabbitmq_exchange=RABBITMQ_EXCHANGE,
         rabbitmq_port=RABBITMQ_PORT,
     )
-    ticker_queue = asyncio.Queue()
-    worker.add_coroutine(coro=ticker.stream, event_queue=ticker_queue)
-    asyncio.run(worker.start())
+    event_queue = asyncio.Queue()
+    worker.add_coroutine(coro=ticker.stream, event_queue=event_queue)
+    asyncio.create_task(worker.start())
+
+    # Wait for the event queue to be filled with events
+    while True:
+        event = await event_queue.get()
+        print(f"Received event: {event}")
+        event_queue.task_done()
+
+
+if __name__ == "__main__":
+    asyncio.run(main())

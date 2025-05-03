@@ -3,9 +3,6 @@
 # import uuid
 import os
 import json
-from dataclasses import asdict
-
-# from dataclasses import asdict
 
 import uvicorn
 import aio_pika

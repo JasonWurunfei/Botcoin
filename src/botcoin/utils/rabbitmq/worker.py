@@ -40,6 +40,7 @@ class AsyncEventWorker:
         self.tasks = []
         self.events = {}
         self.broadcast_queue = BroadcastQueue()
+        self.status = "stopped"
 
     def add_coroutine(
         self,
@@ -69,14 +70,23 @@ class AsyncEventWorker:
         """
         Start all coroutines in the worker.
         """
+        if self.status == "running":
+            self.logger.warning("Worker is already running.")
+            return
+
         self.tasks = []
         for coro in self.coroutines:
             self.tasks.append(asyncio.create_task(coro()))
+        self.status = "running"
 
     async def _stop_coroutines(self) -> None:
         """
         Stop all coroutines in the worker.
         """
+        if self.status == "stopped":
+            self.logger.warning("Worker is already stopped.")
+            return
+
         for task in self.tasks:
             task.cancel()
 
@@ -91,6 +101,7 @@ class AsyncEventWorker:
                 self.logger.info("Task was cancelled.")
             else:
                 self.logger.info("Task completed with result: %s", result)
+        self.status = "stopped"
 
     def add_event(self, event_type: str, event_factory: Callable[..., Event]) -> None:
         """

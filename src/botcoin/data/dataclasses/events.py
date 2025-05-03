@@ -1,4 +1,4 @@
-"""This module contains the data classes used in the botcoin framework."""
+"""This module contains the event data classes used in the botcoin framework."""
 
 from typing import Union
 from asyncio import Queue
@@ -33,7 +33,10 @@ class Event:
     event_time: datetime = field(default_factory=now_us_east)
 
     def __repr__(self):
-        return f"Event(event_type={self.event_type}, event_time={self.event_time.isoformat()})"
+        return (
+            f"Event(event_type={self.event_type}, "
+            + f"event_time={self.event_time.isoformat()})"
+        )
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -51,6 +54,49 @@ class TickEvent(Event):
         return (
             f"TickEvent(symbol={self.symbol}, price={self.price}, "
             + f"event_time={self.event_time.isoformat()})"
+        )
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class RequestTickEvent(Event):
+    """
+    Represents a request for a market ticker in the botcoin framework
+    to start emitting tick events.
+    """
+
+    event_type: str = "request_tick"
+    symbol: str
+    start: datetime
+    end: datetime
+
+    def __repr__(self):
+        return (
+            f"RequestTickEvent(symbol={self.symbol}, start={self.start.isoformat()}, "
+            + f"end={self.end.isoformat()})"
+        )
+
+    def to_json(self):
+        """
+        Convert the request tick event to a JSON serializable format.
+        """
+        return {
+            "event_type": self.event_type,
+            "symbol": self.symbol,
+            "start": self.start.isoformat(),
+            "end": self.end.isoformat(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        """
+        Convert JSON data to a request tick event object.
+        """
+        event_type = json_data.get("event_type")
+        symbol = json_data.get("symbol")
+        start = datetime.fromisoformat(json_data.get("start"))
+        end = datetime.fromisoformat(json_data.get("end"))
+        return RequestTickEvent(
+            event_type=event_type, symbol=symbol, start=start, end=end
         )
 
 

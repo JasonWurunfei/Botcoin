@@ -1,9 +1,10 @@
 """This module contains the data classes related to orders in the botcoin framework."""
 
-from dataclasses import dataclass, field
-from datetime import datetime
+import uuid
 from enum import Enum
 from asyncio import Queue
+from datetime import datetime
+from dataclasses import dataclass, field
 
 import pytz
 
@@ -46,7 +47,7 @@ class Order:
     quantity, direction, and type.
     """
 
-    order_id: str
+    order_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     symbol: str
     quantity: int
     direction: str  # 'buy' or 'sell'

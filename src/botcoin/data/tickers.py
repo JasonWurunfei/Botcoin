@@ -1,19 +1,17 @@
 """This module contains diferent types of price tickers."""
 
-import os
 import json
 import random
 import asyncio
-from datetime import datetime
 from typing import Optional
+from datetime import datetime
+from abc import ABC, abstractmethod
 
 import pytz
 import websockets
 import pandas as pd
-from dotenv import load_dotenv
 
 from botcoin.utils.log import logging
-from botcoin.utils.message_queue import BroadcastQueue
 from botcoin.utils.stream_data import generate_price_stream
 
 from botcoin.data.dataclasses.events import TickEvent
@@ -23,11 +21,29 @@ from botcoin.utils.rabbitmq.conn import new_connection
 from botcoin.utils.rabbitmq.event import emit_event_with_channel
 
 
-# Load variables from .env file into environment
-load_dotenv()
+class Ticker(ABC):
+    """
+    Abstract base class to manage and fetch real-time price data for a list of stock symbols.
+    """
+
+    @abstractmethod
+    async def subscribe(self, symbol: str) -> None:
+        """Subscribes to a new ticker symbol."""
+
+    @abstractmethod
+    async def unsubscribe(self, symbol: str) -> None:
+        """Unsubscribes from a ticker symbol."""
+
+    @abstractmethod
+    async def start(self) -> None:
+        """Starts the ticker service."""
+
+    @abstractmethod
+    async def stop(self) -> None:
+        """Stops the ticker service."""
 
 
-class FinnhubTicker:
+class FinnhubTicker(Ticker):
     """
     An async class to manage and fetch real-time price data for a list of stock symbols.
     """
@@ -36,131 +52,119 @@ class FinnhubTicker:
 
     def __init__(
         self,
+        api_key: str,
         tz: str = "US/Eastern",
         symbols: Optional[list[str]] = None,
-        tick_broadcast: Optional[BroadcastQueue] = None,
     ):
         self.symbols = symbols or []
         self.tz = pytz.timezone(tz)
-        self.url = f"wss://ws.finnhub.io?token={os.getenv('FINNHUB_TOKEN')}"
-        self.tick_queue = tick_broadcast or BroadcastQueue()
+        self.url = f"wss://ws.finnhub.io?token={api_key}"
         self.ws = None
+        self.rabbitmq_conn = None
+        self.rabbitmq_channel = None
 
-    def stream(self) -> asyncio.Task:
-        """
-        Starts the WebSocket connection and begins streaming price data.
-        """
-        return asyncio.create_task(self._stream())
-
-    async def _stream(self):
+    async def start(self) -> None:
         """
         Connects to the websocket and starts streaming price data.
         """
-        while True:
-            try:
-                async with websockets.connect(self.url) as ws:
-                    self.ws = ws
-                    await self._subscribe(ws)
-                    self.logger.info("WebSocket connection established.")
+        try:
+            self.logger.info("Finnhub ticker started.")
+            self.rabbitmq_conn = await new_connection()
+            self.rabbitmq_channel = await self.rabbitmq_conn.channel()
+            self.logger.info("RabbitMQ connection established.")
+            async with websockets.connect(self.url) as ws:
+                self.ws = ws
+                self.logger.info("WebSocket connection established.")
 
-                    async for message in ws:
-                        json_message = json.loads(message)
-                        await self._handle_message(json_message)
+                # Subscribe to the symbols if any are provided
+                if self.symbols:
+                    for symbol in self.symbols:
+                        await ws.send(
+                            json.dumps({"type": "subscribe", "symbol": symbol})
+                        )
 
-            except (json.JSONDecodeError, KeyError, TypeError) as e:
-                self.logger.warning("Failed to parse message: %s", e)
+                async for message in ws:
+                    json_message = json.loads(message)
+                    await self._handle_message(json_message)
 
-            except websockets.ConnectionClosed:
-                self.logger.warning(
-                    "WebSocket connection closed. Reconnecting in 5 seconds..."
-                )
-                await asyncio.sleep(5)
+        finally:
+            await self.stop()
 
-            except asyncio.TimeoutError as e:
-                self.logger.exception("Unexpected error: %s", e)
-                await asyncio.sleep(5)
-
-    async def _subscribe(self, ws):
-        """
-        Subscribes to the given symbols.
-        """
-        for ticker in self.symbols:
-            await ws.send(json.dumps({"type": "subscribe", "symbol": ticker}))
-            self.logger.info("Subscribed to %s", ticker)
-
-    async def subscribe(self, symbol: str):
+    async def subscribe(self, symbol: str) -> None:
         """
         Subscribes to a new ticker symbol.
         """
-        try:
-            if not self.ws:
-                raise ValueError("WebSocket connection is not established.")
-            if symbol not in self.symbols:
-                self.symbols.append(symbol)
-                await self.ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
-                self.logger.info("Subscribed to %s", symbol)
-        except ValueError as e:
-            self.logger.error("WebSocket connection error: %s", e)
-            return
+        if not self.ws:
+            raise ValueError("WebSocket connection is not established.")
 
-    async def unsubscribe(self, symbol: str):
+        if symbol not in self.symbols:
+            self.symbols.append(symbol)
+            await self.ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
+            self.logger.info("Subscribed to %s", symbol)
+
+    async def unsubscribe(self, symbol: str) -> None:
         """
         Unsubscribes from a symbol symbol.
         """
-        try:
-            if not self.ws:
-                raise ValueError("WebSocket connection is not established.")
+        if not self.ws:
+            raise ValueError("WebSocket connection is not established.")
 
-            if symbol in self.symbols:
-                self.symbols.remove(symbol)
-                await self.ws.send(
-                    json.dumps({"type": "unsubscribe", "symbol": symbol})
-                )
-                self.logger.info("Unsubscribed from %s", symbol)
-            else:
-                self.logger.warning(
-                    "Symbol %s not found in subscribed symbols.", symbol
-                )
-
-        except ValueError as e:
-            self.logger.error("WebSocket connection error: %s", e)
-            return
+        if symbol in self.symbols:
+            self.symbols.remove(symbol)
+            await self.ws.send(json.dumps({"type": "unsubscribe", "symbol": symbol}))
+            self.logger.info("Unsubscribed from %s", symbol)
+        else:
+            self.logger.warning("Symbol %s not found in subscribed symbols.", symbol)
 
     async def _handle_message(self, message: dict):
         """
         Handles incoming WebSocket messages.
         """
 
-        records = message.get("data", None)
+        records = message.get("data")
         if records:
             for record in records:
+                # Extract the relevant fields from the message
                 t = datetime.fromtimestamp(record["t"] / 1000, tz=self.tz)
                 p = float(record["p"])
                 s = record["s"]
-                await self.on_message(s, t, p)
 
-    async def on_message(self, s: str, t: datetime, p: float):
+                # Create a TickEvent object and log it
+                tick_evt = TickEvent(
+                    event_time=t,
+                    symbol=s,
+                    price=p,
+                )
+                self.logger.debug(tick_evt)
+
+                # Publish the tick event to the RabbitMQ channel
+                asyncio.create_task(
+                    emit_event_with_channel(tick_evt, self.rabbitmq_channel)
+                )
+
+    async def stop(self) -> None:
         """
-        Called when a new price tick is received.
-        Override or hook into this for custom behavior.
+        Stops the ticker service and closes RabbitMQ resources.
         """
-        tick_evt = TickEvent(
-            event_time=t,
-            symbol=s,
-            price=p,
-        )
-        self.logger.info(tick_evt)
+        if self.rabbitmq_channel and not self.rabbitmq_channel.is_closed:
+            await self.rabbitmq_channel.close()
+            self.logger.debug("RabbitMQ channel closed.")
+        self.rabbitmq_channel = None
 
-        await self.tick_queue.publish(tick_evt)
+        if self.rabbitmq_conn and not self.rabbitmq_conn.is_closed:
+            await self.rabbitmq_conn.close()
+            self.logger.debug("RabbitMQ connection closed.")
+        self.rabbitmq_conn = None
 
-    def get_broadcast_queue(self) -> BroadcastQueue:
-        """
-        Returns the broadcast queue for price ticks.
-        """
-        return self.tick_queue
+        if self.ws and not self.ws.closed:
+            await self.ws.close()
+            self.logger.debug("WebSocket connection closed.")
+        self.ws = None
+
+        self.logger.info("Finnhub ticker stopped.")
 
 
-class HistoricalTicker:
+class HistoricalTicker(Ticker):
     """
     A price ticker class that generates simulated price ticks
     from historical OHLC data.
@@ -181,7 +185,6 @@ class HistoricalTicker:
         real_time: bool = True,
         candle_duration="1min",
         avg_freq_per_minute=12,
-        tick_broadcast: BroadcastQueue = None,
     ):
         self.symbols = symbols or []
         self.tz = pytz.timezone(tz)
@@ -190,8 +193,9 @@ class HistoricalTicker:
         self.real_time = real_time
         self.candle_duration = candle_duration
         self.avg_freq_per_minute = avg_freq_per_minute
-        self.tick_queue = tick_broadcast or BroadcastQueue()
         self.streaming_symbols = {}
+        self.rabbitmq_conn = None
+        self.rabbitmq_channel = None
 
     def get_historical_data(self, symbol: str) -> pd.DataFrame:
         """
@@ -213,16 +217,26 @@ class HistoricalTicker:
         )
         return prices
 
-    async def stream(self) -> None:
+    async def start(self) -> None:
         """
         Starts the price stream generation for all symbols.
         """
-        self.logger.info("Historical price stream started.")
-        tasks = []
-        for symbol in self.symbols:
-            task = self.stream_symbol(symbol)
-            tasks.append(task)
-        await asyncio.gather(*tasks)
+        try:
+            self.logger.info("Historical price ticker started.")
+            self.rabbitmq_conn = await new_connection()
+            self.rabbitmq_channel = await self.rabbitmq_conn.channel()
+            self.logger.info("RabbitMQ connection established.")
+            if self.symbols:
+                tasks = []
+                for symbol in self.symbols:
+                    task = self.stream_symbol(symbol)
+                    tasks.append(task)
+                await asyncio.gather(*tasks)
+            else:
+                await asyncio.Event().wait()  # Will never be set, so blocks forever
+
+        finally:
+            await self.stop()
 
     def stream_symbol(self, symbol: str) -> None:
         """
@@ -272,6 +286,7 @@ class HistoricalTicker:
                               If False, replays all data in sequential order without delay.
         """
         for index, row in prices.iterrows():
+            # create a tick event
             tick_evt = TickEvent(
                 event_time=index.to_pydatetime(),
                 symbol=symbol,
@@ -279,52 +294,45 @@ class HistoricalTicker:
             )
             self.logger.info(tick_evt)
 
-            await self.tick_queue.publish(tick_evt)
+            # publish the tick event to the RabbitMQ channel
+            asyncio.create_task(
+                emit_event_with_channel(tick_evt, self.rabbitmq_channel)
+            )
 
+            # if real_time, sleep until the next timestamp
             if real_time and index != prices.index[-1]:
                 next_index = prices.index[prices.index.get_loc(index) + 1]
                 # Calculate the time to sleep until the next timestamp
                 sleep_time = (next_index - index).total_seconds()
                 await asyncio.sleep(sleep_time)
 
-    def get_broadcast_queue(self) -> BroadcastQueue:
+    async def stop(self) -> None:
         """
-        Returns the broadcast queue for price ticks.
+        Stops the historical ticker service and closes RabbitMQ resources.
         """
-        return self.tick_queue
+        if self.rabbitmq_channel and not self.rabbitmq_channel.is_closed:
+            await self.rabbitmq_channel.close()
+            self.logger.debug("RabbitMQ channel closed.")
+        self.rabbitmq_channel = None
+
+        if self.rabbitmq_conn and not self.rabbitmq_conn.is_closed:
+            await self.rabbitmq_conn.close()
+            self.logger.debug("RabbitMQ connection closed.")
+        self.rabbitmq_conn = None
+
+        # Cancel all streaming tasks
+        for symbol, task in self.streaming_symbols.items():
+            if not task.done():
+                task.cancel()
+                self.logger.debug("Cancelled streaming task for %s", symbol)
+
+        await asyncio.gather(*self.streaming_symbols.values(), return_exceptions=True)
+        self.streaming_symbols.clear()
+
+        self.logger.info("Historical ticker stopped.")
 
 
-class Ticker:
-    """
-    A class to manage and fetch real-time price data for a list of stock symbols.
-    """
-
-    async def subscribe(self, symbol: str) -> None:
-        """
-        Subscribes to a new ticker symbol.
-        """
-        raise NotImplementedError("This method should be implemented in subclasses.")
-
-    async def unsubscribe(self, symbol: str) -> None:
-        """
-        Unsubscribes from a symbol symbol.
-        """
-        raise NotImplementedError("This method should be implemented in subclasses.")
-
-    async def start(self):
-        """
-        Starts the ticker service.
-        """
-        raise NotImplementedError("This method should be implemented in subclasses.")
-
-    async def stop(self):
-        """
-        Stops the ticker service.
-        """
-        raise NotImplementedError("This method should be implemented in subclasses.")
-
-
-class FakeTicker:
+class FakeTicker(Ticker):
     """
     A class to manage and fetch fake price data for a list of stock symbols.
     """
@@ -377,7 +385,9 @@ class FakeTicker:
                 )
 
                 self.logger.info(tick_evt)
-                await emit_event_with_channel(tick_evt, self.rabbitmq_channel)
+                asyncio.create_task(
+                    emit_event_with_channel(tick_evt, self.rabbitmq_channel)
+                )
                 await asyncio.sleep(1)
 
         finally:

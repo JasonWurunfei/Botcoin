@@ -51,10 +51,13 @@ If you use VSCode, you should also set the following variables in the settings.j
 You need to set the following environment variables in `.env` file.
 
 ```.env
-# FastAPI
-FastAPI_HOST=0.0.0.0
-FastAPI_PORT=8000
-FastAPI_WORKERS=1
+LOG_LEVEL=INFO
+PYTHONPATH=./src
+
+## FastAPI
+FASTAPI_HOST=0.0.0.0
+FASTAPI_PORT=8000
+WORKERS=1
 
 # RabbitMQ
 RABBITMQ_HOST=rabbitmq
@@ -62,9 +65,12 @@ RABBITMQ_PORT=5672
 RABBITMQ_USER=guest
 RABBITMQ_PASSWORD=guest
 RABBITMQ_EXCHANGE=botcoin
+
+# API Keys
+FINNHUB_TOKEN=your-api-key
 ```
 
-Then you can use docekr compose to run the Botcoin API.
+Remember to put in your Finnhub API key. Then you can use docekr compose to run the Botcoin API.
 
 ```bash
 docker-compose up -d

@@ -41,6 +41,9 @@ class AsyncEventWorker:
         self.events = {}
         self.worker_queue = worker_queue or asyncio.Queue()
         self.status = "stopped"
+        self._connection = None
+        self._channel = None
+        self._daemon_task = None
 
     def add_coroutine(
         self,
@@ -55,9 +58,30 @@ class AsyncEventWorker:
             event_queue: The message queue to be used for the async task to receive events.
         """
 
+        # Get class name and method name
+        class_name = (
+            coro.__self__.__class__.__name__ if hasattr(coro, "__self__") else None
+        )
+        method_name = coro.__name__
+
         async def wrapper():
             try:
-                return await coro(*args)
+                res = await coro(*args)
+                self.logger.info(
+                    "Coroutine %s.%s completed with result: %s",
+                    class_name,
+                    method_name,
+                    res,
+                )
+                return res
+            except asyncio.CancelledError:
+
+                if class_name:
+                    self.logger.info(
+                        "Coroutine %s.%s was cancelled.", class_name, method_name
+                    )
+                else:
+                    self.logger.info("Coroutine %s was cancelled.", method_name)
             except Exception as e:
                 self.logger.error("Error in coroutine: %s", e)
                 raise
@@ -86,7 +110,8 @@ class AsyncEventWorker:
             return
 
         for task in self.tasks:
-            task.cancel()
+            if not task.done():
+                task.cancel()
 
         # Wait for all tasks to complete or cancel
         results = await asyncio.gather(*self.tasks, return_exceptions=True)
@@ -133,7 +158,7 @@ class AsyncEventWorker:
         """
 
         # Connect to RabbitMQ server
-        connection = await aio_pika.connect_robust(
+        self._connection = await aio_pika.connect_robust(
             host=self.rabbitmq_host,
             port=self.rabbitmq_port,
             login=self.rabbitmq_user,
@@ -146,13 +171,13 @@ class AsyncEventWorker:
         )
 
         # Create a channel and declare the exchange and queue
-        channel = await connection.channel()
+        self._channel = await self._connection.channel()
 
-        exchange = await channel.declare_exchange(
+        exchange = await self._channel.declare_exchange(
             self.rabbitmq_exchange, aio_pika.ExchangeType.FANOUT, durable=True
         )
 
-        queue = await channel.declare_queue(self.rabbitmq_qname, durable=True)
+        queue = await self._channel.declare_queue(self.rabbitmq_qname, durable=True)
         await queue.bind(exchange)
 
         # Listen for messages in the queue
@@ -188,4 +213,33 @@ class AsyncEventWorker:
         The entry point for the worker async loop.
         """
         self.logger.info("Starting worker...")
-        await asyncio.gather(self._start_coroutines(), self._daemonize())
+        self._daemon_task = asyncio.create_task(self._daemonize())
+        await self._start_coroutines()
+
+    async def stop(self) -> None:
+        """
+        Gracefully stop all coroutines and RabbitMQ connection.
+        """
+        self.logger.info("Stopping worker...")
+
+        # Stop coroutines
+        await self._stop_coroutines()
+
+        # Cancel daemon task if running
+        if self._daemon_task:
+            self._daemon_task.cancel()
+            try:
+                await self._daemon_task
+            except asyncio.CancelledError:
+                self.logger.info("Daemon task cancelled.")
+
+        # Close RabbitMQ channel and connection
+        if self._channel and not self._channel.is_closed:
+            await self._channel.close()
+            self.logger.info("RabbitMQ channel closed.")
+
+        if self._connection and not self._connection.is_closed:
+            await self._connection.close()
+            self.logger.info("RabbitMQ connection closed.")
+
+        self.logger.info("Worker stopped cleanly.")

@@ -1,12 +1,28 @@
 """This module handles the RabbitMQ events for the Botcoin application."""
 
 import json
+from abc import ABC, abstractmethod
 
 import aio_pika
 from aio_pika.abc import AbstractChannel
 
 from botcoin.utils.rabbitmq.conn import RABBITMQ_URL, RABBITMQ_EXCHANGE
 from botcoin.data.dataclasses.events import Event
+
+
+class EventReceiver(ABC):
+    """
+    Abstract base class for event receivers.
+    """
+
+    @abstractmethod
+    async def on_event(self, event: Event) -> None:
+        """
+        Abstract method to handle incoming events.
+
+        Args:
+            event (Event): The event to be handled.
+        """
 
 
 async def emit_event(

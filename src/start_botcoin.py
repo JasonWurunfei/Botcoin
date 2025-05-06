@@ -72,10 +72,9 @@ async def main():
         while not stop_event.is_set():
             try:
                 event = await asyncio.wait_for(worker.worker_queue.get(), timeout=1.0)
+                asyncio.create_task(ticker.on_event(event))
             except asyncio.TimeoutError:
                 continue  # Check for stop_event periodically
-            if isinstance(event, RequestTickEvent):
-                await ticker.subscribe(event.symbol)
     finally:
         # Cleanup
         await worker.stop()

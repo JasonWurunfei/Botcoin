@@ -1,14 +1,20 @@
 """This script is used to interact with botcoin runner"""
 
 import os
-from datetime import datetime
 
 import uvicorn
 from fastapi import FastAPI
 from dotenv import load_dotenv
 
 from botcoin.cost.trade import CommissionTradeCost
-from botcoin.data.dataclasses.events import StartEvent, StopEvent, RequestTickEvent
+from botcoin.data.dataclasses.events import (
+    StartEvent,
+    StopEvent,
+    RequestTickEvent,
+    RequestStopTickEvent,
+    PlaceOrderEvent,
+)
+from botcoin.data.dataclasses.order import MarketOrder
 from botcoin.utils.rabbitmq.event import emit_event
 
 
@@ -89,51 +95,84 @@ async def start_ticker(symbol: str) -> dict:
         symbol (str): The symbol to start the ticker for.
 
     Returns:
-        dict: A message indicating that the ticker has started.
+        dict: A message indicating that the command has been sent.
     """
     await emit_event(RequestTickEvent(symbol=symbol))
 
     return {
-        "message": f"Ticker started for {symbol}",
+        "message": f"Tick command sent for {symbol}",
     }
 
 
-@app.get("/practice/historical/start")
-async def start_practice() -> dict:
-    # async def start_practice(start_date: str, end_date: str) -> dict:
+@app.get("/ticker/stop")
+async def stop_ticker(symbol: str) -> dict:
     """
-    Start the practice session.
+    Stop the ticker for a given symbol.
 
     Args:
-        start_date (str): The start date for the practice session.
-            format: YYYY-MM-DD HH:MM:SS
-        end_date (str): The end date for the practice session.
-            format: YYYY-MM-DD HH:MM:SS
+        symbol (str): The symbol to stop the ticker for.
 
     Returns:
-        dict: A message indicating that the practice session has started.
+        dict: A message indicating that the command has been sent.
+    """
+    await emit_event(RequestStopTickEvent(symbol=symbol))
+
+    return {
+        "message": f"Stop tick command sent for {symbol}",
+    }
+
+
+@app.get("/order/place/market")
+async def place_market_order(symbol: str, quantity: int, direction: str) -> dict:
+    """
+    Place a market order.
+
+    Args:
+        symbol (str): The symbol for the order.
+        quantity (int): The quantity of the order.
+        direction (str): The direction of the order ("buy" or "sell").
+
+    Returns:
+        dict: A message indicating that the order has been placed.
+    """
+
+    order = MarketOrder(
+        symbol=symbol.upper(),
+        quantity=quantity,
+        direction=direction,
+    )
+
+    await emit_event(PlaceOrderEvent(order=order))
+
+    return {
+        "message": f"Market order placed for {symbol.upper()} "
+        + f"with quantity {quantity} and direction {direction}",
+    }
+
+
+@app.get("/start")
+async def start_botcoin() -> dict:
+    """
+    Start Botcoin.
     """
 
     await emit_event(StartEvent())
 
     return {
-        "message": "Practice session started",
+        "message": "Botcoin start command sent",
     }
 
 
-@app.get("/practice/historical/stop")
-async def stop_practice() -> dict:
+@app.get("/stop")
+async def stop_botcoin() -> dict:
     """
-    Stop the practice session.
-
-    Returns:
-        dict: A message indicating that the practice session has stopped.
+    Stop Botcoin.
     """
 
     await emit_event(StopEvent())
 
     return {
-        "message": "Practice session stopped",
+        "message": "Botcoin stop command sent",
     }
 
 

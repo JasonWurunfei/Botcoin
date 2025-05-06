@@ -1,8 +1,8 @@
 """This module contains the data classes related to orders in the botcoin framework."""
 
 import uuid
+from abc import ABC, abstractmethod
 from enum import Enum
-from asyncio import Queue
 from datetime import datetime
 from dataclasses import dataclass, field
 
@@ -40,7 +40,7 @@ class OrderType(Enum):
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
-class Order:
+class Order(ABC):
     """
     Represents an order in the botcoin framework.
     This class contains the details of an order including its ID, symbol,
@@ -59,18 +59,18 @@ class Order:
         if self.quantity <= 0:
             raise ValueError(f"Quantity must be greater than zero: {self.quantity}")
 
+    @abstractmethod
     def to_json(self):
         """
         Convert the order to a JSON serializable format.
         """
-        raise NotImplementedError("Subclasses must implement to_json method")
 
     @classmethod
+    @abstractmethod
     def from_json(cls, json_data):
         """
         Convert JSON data to an order object.
         """
-        raise NotImplementedError("Subclasses must implement from_json method")
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -223,7 +223,6 @@ class OrderBookItem:
 
     order_id: str
     order: Order
-    queue: Queue
     status: OrderStatus = OrderStatus.NOT_TRADED
 
     def __repr__(self):

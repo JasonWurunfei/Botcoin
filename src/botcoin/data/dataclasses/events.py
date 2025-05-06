@@ -1,8 +1,8 @@
 """This module contains the event data classes used in the botcoin framework."""
 
-from typing import Union, ClassVar
-from asyncio import Queue
+from abc import ABC
 from datetime import datetime
+from typing import Union, ClassVar
 from dataclasses import dataclass, field
 
 import pytz
@@ -24,7 +24,7 @@ def now_us_east():
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
-class Event:
+class Event(ABC):
     """
     Base class for all events in the botcoin framework.
     """
@@ -129,6 +129,39 @@ class RequestTickEvent(Event):
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class RequestStopTickEvent(Event):
+    """
+    Represents a request for a market ticker in the botcoin framework
+    to stop emitting tick events.
+    """
+
+    event_type: ClassVar[str] = "request_stop_tick"
+    symbol: str
+
+    def __repr__(self):
+        return f"RequestStopTickEvent(symbol={self.symbol})"
+
+    def to_json(self):
+        """
+        Convert the request stop tick event to a JSON serializable format.
+        """
+        return {
+            "event_type": self.event_type,
+            "symbol": self.symbol,
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        """
+        Convert JSON data to a request stop tick event object.
+        """
+        if json_data.get("event_type") != "request_stop_tick":
+            raise ValueError("Invalid event type for RequestStopTickEvent")
+
+        return cls(symbol=json_data.get("symbol"))
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class StartEvent(Event):
     """
     Represents the start event for async event workers
@@ -190,6 +223,21 @@ class StopEvent(Event):
         return cls(event_time=datetime.fromisoformat(json_data.get("event_time")))
 
 
+def deserialize_order(json_data) -> Union[MarketOrder, LimitOrder, OcoOrder]:
+    """
+    Deserialize JSON data to an order object.
+    """
+    order_type = json_data.get("order_type")
+    if order_type == "market":
+        return MarketOrder.from_json(json_data)
+    elif order_type == "limit":
+        return LimitOrder.from_json(json_data)
+    elif order_type == "oco":
+        return OcoOrder.from_json(json_data)
+    else:
+        raise ValueError(f"Invalid order type: {order_type}")
+
+
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class PlaceOrderEvent(Event):
     """
@@ -199,7 +247,6 @@ class PlaceOrderEvent(Event):
 
     event_type: ClassVar[str] = "place_order"
     order: Union[MarketOrder, LimitOrder, OcoOrder]
-    reply_to: Queue
 
     def __repr__(self):
         return f"PlaceOrderEvent(order={self.order})"
@@ -211,7 +258,6 @@ class PlaceOrderEvent(Event):
         return {
             "event_type": self.event_type,
             "order": self.order.to_json(),
-            "reply_to": self.reply_to,
         }
 
     @classmethod
@@ -222,10 +268,110 @@ class PlaceOrderEvent(Event):
         if json_data.get("event_type") != "place_order":
             raise ValueError("Invalid event type for PlaceOrderEvent")
 
-        return cls(
-            order=Order.from_json(json_data["order"]),
-            reply_to=json_data["reply_to"],
-        )
+        order = deserialize_order(json_data.get("order"))
+        return cls(order=order)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class CancelOrderEvent(Event):
+    """
+    Represents an event to cancel an order.
+    This event is used to send a cancellation request to the broker.
+    """
+
+    event_type: ClassVar[str] = "cancel_order"
+    order: Order
+
+    def __repr__(self):
+        return f"CancelOrderEvent(order={self.order})"
+
+    def to_json(self):
+        """
+        Convert the event to a JSON serializable format.
+        """
+        return {
+            "event_type": self.event_type,
+            "order": self.order.to_json(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        """
+        Convert JSON data to a cancel order event object.
+        """
+        if json_data.get("event_type") != "cancel_order":
+            raise ValueError("Invalid event type for CancelOrderEvent")
+
+        order = deserialize_order(json_data.get("order"))
+        return cls(order=order)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class ModifyOrderEvent(Event):
+    """
+    Represents an event to modify an order.
+    This event is used to send a modification request to the broker.
+    """
+
+    event_type: ClassVar[str] = "modify_order"
+    modified_order: Order
+
+    def __repr__(self):
+        return f"ModifyOrderEvent(modified_order={self.modified_order})"
+
+    def to_json(self):
+        """
+        Convert the event to a JSON serializable format.
+        """
+        return {
+            "event_type": self.event_type,
+            "modified_order": self.modified_order.to_json(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        """
+        Convert JSON data to a modify order event object.
+        """
+        if json_data.get("event_type") != "modify_order":
+            raise ValueError("Invalid event type for ModifyOrderEvent")
+
+        modified_order = deserialize_order(json_data.get("modified_order"))
+        return cls(modified_order=modified_order)
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class OrderModifiedEvent(Event):
+    """
+    Represents an event that contains the modified order details.
+    This event is used to notify the system about the modified order.
+    """
+
+    event_type: ClassVar[str] = "order_modified"
+    modified_order: Order
+
+    def __repr__(self):
+        return f"OrderModifiedEvent(modified_order={self.modified_order})"
+
+    def to_json(self):
+        """
+        Convert the event to a JSON serializable format.
+        """
+        return {
+            "event_type": self.event_type,
+            "modified_order": self.modified_order.to_json(),
+        }
+
+    @classmethod
+    def from_json(cls, json_data):
+        """
+        Convert JSON data to an order modified event object.
+        """
+        if json_data.get("event_type") != "order_modified":
+            raise ValueError("Invalid event type for OrderModifiedEvent")
+
+        modified_order = deserialize_order(json_data.get("modified_order"))
+        return cls(modified_order=modified_order)
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -260,7 +406,9 @@ class OrderStatusEvent(Event):
         if json_data.get("event_type") != "order_status":
             raise ValueError("Invalid event type for OrderStatusEvent")
 
+        order = deserialize_order(json_data["order"])
+
         return cls(
-            order=Order.from_json(json_data["order"]),
+            order=order,
             status=OrderStatus(json_data["status"]),
         )

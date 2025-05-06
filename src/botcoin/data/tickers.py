@@ -5,7 +5,7 @@ import random
 import asyncio
 from typing import Optional
 from datetime import datetime
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 
 import pytz
 import websockets
@@ -14,14 +14,19 @@ import pandas as pd
 from botcoin.utils.log import logging
 from botcoin.utils.stream_data import generate_price_stream
 
-from botcoin.data.dataclasses.events import TickEvent, RequestTickEvent
+from botcoin.data.dataclasses.events import (
+    Event,
+    TickEvent,
+    RequestTickEvent,
+    RequestStopTickEvent,
+)
 from botcoin.data.historical import YfDataManager
 
 from botcoin.utils.rabbitmq.conn import new_connection
 from botcoin.utils.rabbitmq.event import emit_event_with_channel, EventReceiver
 
 
-class Ticker(EventReceiver):
+class Ticker(EventReceiver, ABC):
     """
     Abstract base class to manage and fetch real-time price data for a list of stock symbols.
     """
@@ -42,9 +47,11 @@ class Ticker(EventReceiver):
     async def stop(self) -> None:
         """Stops the ticker service."""
 
-    async def on_event(self, event: TickEvent) -> None:
+    async def on_event(self, event: Event) -> None:
         if isinstance(event, RequestTickEvent):
             asyncio.create_task(self.subscribe(event.symbol))
+        elif isinstance(event, RequestStopTickEvent):
+            asyncio.create_task(self.unsubscribe(event.symbol))
 
 
 class FinnhubTicker(Ticker):

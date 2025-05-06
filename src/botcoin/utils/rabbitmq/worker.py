@@ -215,7 +215,19 @@ class AsyncEventWorker:
         The entry point for the worker async loop.
         """
         self.logger.info("Starting worker...")
-        self._daemon_task = asyncio.create_task(self._daemonize())
+
+        async def daemon_wrapper():
+            """Daemon wrapper to print out exceptions."""
+            try:
+                await self._daemonize()
+            except Exception as e:
+                self.logger.error("Error in daemon: %s", e)
+                self.logger.error("Stack trace:\n%s", traceback.format_exc())
+                # Restart the daemon to continue listening for events
+                self._daemon_task = asyncio.create_task(daemon_wrapper())
+                raise e
+
+        self._daemon_task = asyncio.create_task(daemon_wrapper())
         await self._start_coroutines()
 
     async def stop(self) -> None:

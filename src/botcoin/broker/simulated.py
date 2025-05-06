@@ -1,220 +1,277 @@
 """This module is ued to implement a simulated broker for the botcoin framework."""
 
 import asyncio
-from asyncio import Queue
+from abc import ABC, abstractmethod
 
 
 from botcoin.utils.log import logging
 from botcoin.data.dataclasses.order import Order, OrderType, OrderStatus, OrderBookItem
 from botcoin.data.dataclasses.events import (
+    Event,
+    TickEvent,
     OrderStatusEvent,
     PlaceOrderEvent,
+    CancelOrderEvent,
+    ModifyOrderEvent,
+    OrderModifiedEvent,
+    RequestTickEvent,
+    RequestStopTickEvent,
 )
-from botcoin.data.tickers import FinnhubTicker
-from botcoin.utils.message_queue import BroadcastQueue
+
+from botcoin.utils.rabbitmq.conn import new_connection
+from botcoin.utils.rabbitmq.event import EventReceiver, emit_event_with_channel
 
 
-class SimpleBroker:
+class Broker(EventReceiver, ABC):
     """
-    This class is a simple broker that simulates the behavior of a real broker.
+    Abstract base class for a broker.
 
-    It always trades immediately at the market price.
+    This class is used to implement a broker for the botcoin framework.
     """
 
-    logger = logging.getLogger(__qualname__)
-
-    def __init__(
-        self,
-        ticker: FinnhubTicker,
-        broker_queue: Queue = None,
-    ) -> None:
-        self.broker_queue = broker_queue or Queue()
-        self.ticker = ticker
-        self.orderbook = {}
-
-    async def run(self) -> None:
+    @abstractmethod
+    async def start(self) -> None:
         """
         This method starts the broker.
-
-        It runs in an infinite loop, waiting for orders to be placed.
         """
-        self.logger.info("Broker started")
-        while True:
-            evt = await self.broker_queue.get()
-            if isinstance(evt, PlaceOrderEvent):
-                order = evt.order
-                self.logger.debug("Received order: %s", order)
-                await self.on_order(evt)
-            else:
-                self.logger.warning("Unknown event type: %s", type(evt))
-            self.broker_queue.task_done()
 
-    async def on_order(self, order_event: PlaceOrderEvent) -> None:
+    @abstractmethod
+    async def stop(self) -> None:
         """
-        This method is called when an order is placed.
-
-        :param order: The order that was placed.
+        This method stops the broker.
         """
-        reply_to = order_event.reply_to
-        order = order_event.order
-        if reply_to is not None:
-            orderbook_item = await self.place_order(order, reply_to)
-            order_status_event = OrderStatusEvent(
-                order=order,
-                status=orderbook_item.status,
-            )
 
-            await reply_to.put(order_status_event)
-            self.logger.debug(
-                "Order %s processed with status: %s",
-                order.order_id,
-                order_status_event.status.value,
-            )
-
-    async def place_order(self, order: Order, reply_to: Queue) -> dict:
+    @abstractmethod
+    async def place_order(self, order: Order) -> None:
         """
         This method places an order.
 
         :param order: The order to be placed.
-        :param reply_to: The queue to send the order status event.
-        """
-        await asyncio.sleep(0.1)  # Simulate network delay
-
-        # create a queue for receiving price tick events
-        order_queue = asyncio.Queue()
-
-        # register the order to the orderbook
-        orderbook_item = OrderBookItem(
-            order_id=order.order_id,
-            order=order,
-            queue=order_queue,
-        )
-        self.orderbook[order.order_id] = orderbook_item
-
-        # create a task to run the order
-        asyncio.create_task(self.run_order(order, order_queue, reply_to))
-
-        return orderbook_item
-
-    async def run_order(
-        self, order: Order, order_queue: Queue, reply_to: Queue
-    ) -> None:
-        """
-        This method runs the order.
-
-        :param order: The order to be run.
-        """
-        orderbook_item = self.orderbook.get(order.order_id)
-
-        # Simulate order execution
-        self.logger.info("Running order: %s", order)
-
-        # register the order queue with the ticker
-        ticker_queue: BroadcastQueue = self.ticker.get_broadcast_queue()
-        ticker_queue.register(order_queue)
-
-        # subscribe to the ticker for the order symbol
-        await self.ticker.subscribe(order.symbol)
-
-        # wait for the events
-        while True:
-            try:
-                # wait for the next price tick event
-                price_event = await order_queue.get()
-                self.logger.debug("Received price event: %s", price_event)
-
-                # process the price event
-                current_price = price_event.price
-                if order.order_type == OrderType.MARKET:
-                    if self.can_trade_market_order():
-                        await self.execute_trade(
-                            order=order,
-                            traded_price=current_price,
-                            reply_to=reply_to,
-                        )
-                        break
-
-                if order.order_type == OrderType.LIMIT:
-                    if self.can_trade_limit_order(current_price, order):
-                        await self.execute_trade(
-                            order=order,
-                            traded_price=current_price,
-                            reply_to=reply_to,
-                        )
-                        break
-
-                if order.order_type == OrderType.STOP:
-                    raise NotImplementedError("Stop orders are not implemented yet.")
-                if order.order_type == OrderType.OCO:
-                    raise NotImplementedError("OCO orders are not implemented yet.")
-
-                self.logger.debug(
-                    "%s order %s not executed, current price: %s",
-                    order.order_type.value,
-                    order.order_id,
-                    current_price,
-                )
-
-            except asyncio.CancelledError:
-                self.logger.info("Order %s cancelled", order.order_id)
-                orderbook_item.status = OrderStatus.CANCELLED
-                break
-
-        orderbook_item.status = OrderStatus.CANCELLED
-        orderbook_item.queue = None
-
-    def can_trade_limit_order(self, current_price: float, order: Order) -> bool:
-        """
-        This method checks if a limit order can be executed
-        It checks if the order can be executed at the current market price.
-
-        :param cur_price: The current market price.
-        :param order: The order to be processed.
-        :return: True if the order can be executed, False otherwise.
         """
 
-        if (order.direction == "buy" and current_price <= order.limit_price) or (
-            order.direction == "sell" and current_price >= order.limit_price
-        ):
-            return True
-        return False
-
-    def can_trade_market_order(self) -> bool:
+    @abstractmethod
+    async def cancel_order(self, order: Order) -> None:
         """
-        This method checks if a market order can be executed.
+        This method cancels an order.
 
-        It will return True if the market is open and the order is valid.
+        :param order: The order to be cancelled.
         """
-        return True
 
-    async def execute_trade(
-        self, order: Order, traded_price: float, reply_to: Queue
-    ) -> None:
+    @abstractmethod
+    async def modify_order(self, modified_order: Order) -> None:
         """
-        This method simulates executing a trade.
+        This method modifies an order.
+
+        :param modified_order: The order to be modified.
+        """
+
+    async def on_event(self, event: Event) -> None:
+        if isinstance(event, PlaceOrderEvent):
+            asyncio.create_task(self.place_order(event.order))
+        elif isinstance(event, CancelOrderEvent):
+            asyncio.create_task(self.cancel_order(event.order))
+        elif isinstance(event, ModifyOrderEvent):
+            asyncio.create_task(self.modify_order(event.modified_order))
+
+
+class SimulatedBroker(Broker, ABC):
+    """
+    This class is a simulated broker that simulates the behavior of a real broker.
+    """
+
+    @abstractmethod
+    async def trade_order(self, order: Order, price: float) -> None:
+        """
+        This method trades an order.
 
         :param order: The order to be traded.
-        :param traded_price: The price at which the order was traded.
-        :param reply_to: The queue to send the order status event.
-        :return: None
+        :param price: The price at which the order is traded.
         """
-        order_status_event = OrderStatusEvent(
+
+    @abstractmethod
+    async def on_tick_event(self, tick_event: TickEvent) -> None:
+        """
+        This method is called when a tick event is received.
+        It is used to trigger the order execution.
+
+        :param tick_event: The tick event that was received.
+        """
+
+    async def on_event(self, event: Event) -> None:
+        await super().on_event(event)
+        if isinstance(event, TickEvent):
+            asyncio.create_task(self.on_tick_event(event))
+
+
+class SimpleBroker(SimulatedBroker):
+    """
+    This class is a simple broker that simulates the behavior of a real broker.
+    """
+
+    logger = logging.getLogger(__qualname__)
+
+    def __init__(self) -> None:
+        self.order_book: dict[str, OrderBookItem] = {}
+        self.rabbitmq_conn = None
+        self.rabbitmq_channel = None
+
+    async def start(self) -> None:
+        self.rabbitmq_conn = await new_connection()
+        self.logger.debug("RabbitMQ connection established.")
+        self.rabbitmq_channel = await self.rabbitmq_conn.channel()
+        self.logger.info("SimpleBroker started.")
+
+    async def stop(self) -> None:
+        if self.rabbitmq_channel and not self.rabbitmq_channel.is_closed:
+            await self.rabbitmq_channel.close()
+            self.logger.debug("RabbitMQ channel closed.")
+        self.rabbitmq_channel = None
+
+        if self.rabbitmq_conn and not self.rabbitmq_conn.is_closed:
+            await self.rabbitmq_conn.close()
+            self.logger.debug("RabbitMQ connection closed.")
+        self.rabbitmq_conn = None
+
+        self.logger.info("SimpleBroker stopped.")
+
+    async def place_order(self, order: Order) -> None:
+        self.order_book[order.order_id] = OrderBookItem(
+            order_id=order.order_id,
             order=order,
-            status=OrderStatus.TRADED,
+            status=OrderStatus.NOT_TRADED,
         )
-        await reply_to.put(order_status_event)
+        await emit_event_with_channel(
+            channel=self.rabbitmq_channel,
+            event=RequestTickEvent(
+                symbol=order.symbol,
+            ),
+        )
+
+    async def cancel_order(self, order: Order) -> None:
+        if order.order_id in self.order_book:
+            order_book_item = self.order_book[order.order_id]
+            order_book_item.status = OrderStatus.CANCELLED
+            await emit_event_with_channel(
+                channel=self.rabbitmq_channel,
+                event=OrderStatusEvent(
+                    order=order,
+                    status=OrderStatus.CANCELLED,
+                ),
+            )
+            if self._is_last_order_for_symbol(order):
+                await emit_event_with_channel(
+                    channel=self.rabbitmq_channel,
+                    event=RequestStopTickEvent(
+                        symbol=order.symbol,
+                    ),
+                )
+
+            self.logger.info("Order %s cancelled", order.order_id)
+        else:
+            self.logger.warning("Order %s not found in order book", order.order_id)
+
+    async def modify_order(self, modified_order: Order) -> None:
+        if modified_order.order_id in self.order_book:
+            order_book_item = self.order_book[modified_order.order_id]
+            order_book_item.order = modified_order
+            await emit_event_with_channel(
+                channel=self.rabbitmq_channel,
+                event=OrderModifiedEvent(
+                    modified_order=modified_order,
+                ),
+            )
+            self.logger.info("Order %s modified", modified_order.order_id)
+        else:
+            self.logger.warning(
+                "Order %s not found in order book for modification",
+                modified_order.order_id,
+            )
+
+    async def trade_order(self, order: Order, price: float) -> None:
+        order_book_item = self.order_book[order.order_id]
+        order_book_item.status = OrderStatus.TRADED
+        await emit_event_with_channel(
+            channel=self.rabbitmq_channel,
+            event=OrderStatusEvent(
+                order=order,
+                status=OrderStatus.TRADED,
+            ),
+        )
+
+        if self._is_last_order_for_symbol(order):
+            await emit_event_with_channel(
+                channel=self.rabbitmq_channel,
+                event=RequestStopTickEvent(
+                    symbol=order.symbol,
+                ),
+            )
+
         self.logger.info(
             "Order %s executed, traded %s stocks of %s at price: %s",
             order.order_id,
             order.quantity,
             order.symbol,
-            traded_price,
+            price,
         )
 
-    def get_queue(self) -> Queue:
-        """
-        This method returns the broker queue.
+    async def on_tick_event(self, tick_event: TickEvent) -> None:
+        symbol = tick_event.symbol
+        price = tick_event.price
 
-        :return: The broker queue.
+        related_orders = [
+            item.order
+            for item in self.order_book.values()
+            if item.order.symbol == symbol
+        ]
+
+        for order in related_orders:
+            if self._is_tradeable(order, price):
+                await self.trade_order(order, price)
+            else:
+                self.logger.debug(
+                    "Order %s not tradeable at price %s",
+                    order.order_id,
+                    price,
+                )
+
+    def _is_tradeable(self, order: Order, price: float) -> bool:
         """
-        return self.broker_queue
+        This method checks if an order is tradeable.
+
+        It checks if the order can be executed at the current market price.
+        :param order: The order to be processed.
+        :param price: The current market price.
+        :return: True if the order can be executed, False otherwise.
+        """
+        if order.order_type == OrderType.MARKET:
+            return True
+        elif order.order_type == OrderType.LIMIT:
+            if (order.direction == "buy" and price <= order.limit_price) or (
+                order.direction == "sell" and price >= order.limit_price
+            ):
+                return True
+        elif order.order_type == OrderType.STOP:
+            raise NotImplementedError("Stop orders are not implemented yet.")
+        elif order.order_type == OrderType.OCO:
+            raise NotImplementedError("OCO orders are not implemented yet.")
+        else:
+            self.logger.warning("Unknown order type: %s", order.order_type)
+            return False
+
+    def _is_last_order_for_symbol(self, order: Order) -> bool:
+        """
+        This method checks if the order is the last order for the symbol.
+
+        :param order: The order to be processed.
+        :return: True if the order is the last order for the symbol, False otherwise.
+        """
+        return (
+            len(
+                [
+                    item
+                    for item in self.order_book.values()
+                    if item.order.symbol == order.symbol
+                ]
+            )
+            == 1
+        )

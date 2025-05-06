@@ -72,20 +72,19 @@ class FinnhubTicker(Ticker):
             self.rabbitmq_conn = await new_connection()
             self.rabbitmq_channel = await self.rabbitmq_conn.channel()
             self.logger.info("RabbitMQ connection established.")
-            async with websockets.connect(self.url) as ws:
-                self.ws = ws
-                self.logger.info("WebSocket connection established.")
+            self.ws = await websockets.connect(self.url)
+            self.logger.info("WebSocket connection established.")
 
-                # Subscribe to the symbols if any are provided
-                if self.symbols:
-                    for symbol in self.symbols:
-                        await ws.send(
-                            json.dumps({"type": "subscribe", "symbol": symbol})
-                        )
+            # Subscribe to the symbols if any are provided
+            if self.symbols:
+                for symbol in self.symbols:
+                    await self.ws.send(
+                        json.dumps({"type": "subscribe", "symbol": symbol})
+                    )
 
-                async for message in ws:
-                    json_message = json.loads(message)
-                    await self._handle_message(json_message)
+            async for message in self.ws:
+                json_message = json.loads(message)
+                await self._handle_message(json_message)
 
         finally:
             await self.stop()

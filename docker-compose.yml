@@ -42,6 +42,7 @@ services:
       - RABBITMQ_PORT=${RABBITMQ_PORT}
       - RABBITMQ_USER=${RABBITMQ_USER}
       - RABBITMQ_PASSWORD=${RABBITMQ_PASSWORD}
+      - FINNHUB_TOKEN=${FINNHUB_TOKEN}
     networks:
       - botcoin
 

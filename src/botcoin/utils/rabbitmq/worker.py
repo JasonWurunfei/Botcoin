@@ -4,6 +4,7 @@ This module manages a RabbitMQ async worker process for the botcoin framework.
 
 import json
 import asyncio
+import traceback
 from typing import Callable, Coroutine, Any, Type
 
 import aio_pika
@@ -84,6 +85,7 @@ class AsyncEventWorker:
                     self.logger.info("Coroutine %s was cancelled.", method_name)
             except Exception as e:
                 self.logger.error("Error in coroutine: %s", e)
+                self.logger.error("Stack trace:\n%s", traceback.format_exc())
                 raise
 
         self.coroutines.append(wrapper)

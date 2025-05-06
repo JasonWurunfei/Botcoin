@@ -3,14 +3,13 @@
 import os
 import signal
 import asyncio
-from datetime import datetime
 
 from dotenv import load_dotenv
 
 from botcoin.utils.log import logging
 from botcoin.utils.rabbitmq.worker import AsyncEventWorker
 
-from botcoin.data.tickers import HistoricalTicker
+from botcoin.data.tickers import FinnhubTicker
 from botcoin.data.dataclasses.events import RequestTickEvent, TickEvent
 
 load_dotenv()
@@ -19,8 +18,7 @@ RABBITMQ_PASS = os.getenv("RABBITMQ_PASSWORD", "guest")
 RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
 RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
 RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "botcoin")
-
-# FINNHUB_API_KEY = os.getenv("FINNHUB_TOKEN")
+FINNHUB_API_KEY = os.getenv("FINNHUB_TOKEN")
 
 stop_event = asyncio.Event()
 
@@ -57,9 +55,9 @@ async def main():
     )
 
     # Define the service to be run
-    start = datetime(year=2025, month=4, day=15, hour=0, minute=0, second=0)
-    end = datetime(year=2025, month=4, day=16, hour=0, minute=0, second=0)
-    ticker = HistoricalTicker(start_date=start, end_date=end)
+    ticker = FinnhubTicker(
+        api_key=FINNHUB_API_KEY,
+    )
 
     # Register the ticker service with the worker
     worker.add_coroutine(coro=ticker.start)

@@ -1,6 +1,6 @@
 """This module contains the event data classes used in the botcoin framework."""
 
-from abc import ABC
+from abc import ABC, abstractmethod
 from datetime import datetime
 from typing import Union, ClassVar
 from dataclasses import dataclass, field
@@ -38,18 +38,18 @@ class Event(ABC):
             + f"event_time={self.event_time.isoformat()})"
         )
 
+    @abstractmethod
     def to_json(self):
         """
         Convert the event to a JSON serializable format.
         """
-        raise NotImplementedError("Subclasses must implement to_json method")
 
     @classmethod
+    @abstractmethod
     def from_json(cls, json_data):
         """
         Convert JSON data to an event object.
         """
-        raise NotImplementedError("Subclasses must implement from_json method")
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)

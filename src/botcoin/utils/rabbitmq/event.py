@@ -42,7 +42,7 @@ async def emit_event(
         channel = await connection.channel()
         exchange = await channel.get_exchange(RABBITMQ_EXCHANGE)
 
-        body = event.to_json()
+        body = event.serialize()
 
         message = aio_pika.Message(
             body=json.dumps(body).encode(),
@@ -69,7 +69,7 @@ async def emit_event_with_channel(
 
     exchange = await channel.get_exchange(exchange_name)
 
-    body = event.to_json()
+    body = event.serialize()
 
     message = aio_pika.Message(
         body=json.dumps(body).encode(),

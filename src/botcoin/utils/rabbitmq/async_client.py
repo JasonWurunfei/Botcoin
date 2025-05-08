@@ -19,7 +19,7 @@ class AsyncAMQPClient:
 
     logger = logging.getLogger(__qualname__)
 
-    def __init__(self, rabbitmq_hostname: str, rabbitmq_port: int = 5672) -> None:
+    def __init__(self, rabbitmq_hostname: str = None, rabbitmq_port: int = 5672) -> None:
         """
         Initializes the AMQPClient with the server's hostname and queue name.
 
@@ -27,7 +27,7 @@ class AsyncAMQPClient:
             rabbitmq_hostname (str): The hostname of the RabbitMQ server.
             rabbitmq_port (int): The port of the RabbitMQ Server
         """
-        self.rabbitmq_hostname: str = rabbitmq_hostname
+        self.rabbitmq_hostname: str = rabbitmq_hostname or "localhost"
         self.rabbitmq_port: int = rabbitmq_port
         self.connection = None
         self.channel = None
@@ -37,17 +37,13 @@ class AsyncAMQPClient:
         Establishes a connection to the AMQP server and sets up the channel,
         callback queue, and basic consumer.
         """
-        self.logger.info(
-            "Trying to establish connection with server @%s.", self.rabbitmq_hostname
-        )
+        self.logger.info("Trying to establish connection with server @%s.", self.rabbitmq_hostname)
 
         self.connection = await aio_pika.connect_robust(
             host=self.rabbitmq_hostname, port=self.rabbitmq_port
         )
         self.channel = await self.connection.channel()
-        self.logger.info(
-            "Connection with server @%s established.", self.rabbitmq_hostname
-        )
+        self.logger.info("Connection with server @%s established.", self.rabbitmq_hostname)
 
     async def call(self, url: str, server_qname: str) -> dict:
         """
@@ -65,13 +61,21 @@ class AsyncAMQPClient:
 
         req = {"url": url}
 
-        if self.connection is None:
-            self.logger.info("Connection with RabbitMQ server not active")
-            await self.connect()
+        if self.connection is None or self.connection.is_closed:
+            if self.channel is None or self.channel.is_closed:
+                self.logger.debug(
+                    "RabbitMQ connection is not active. Reconnecting to server @%s.",
+                    self.rabbitmq_hostname,
+                )
+                await self.connect()
+            else:
+                self.logger.debug(
+                    "RabbitMQ channel is not active. Reconnecting to server @%s.",
+                    self.rabbitmq_hostname,
+                )
+                self.channel = await self.connection.channel()
 
-        callback_queue = await self.channel.declare_queue(
-            "", auto_delete=True, exclusive=True
-        )
+        callback_queue = await self.channel.declare_queue("", auto_delete=True, exclusive=True)
 
         # Declare server queue in case the queue is not created.
         await self.channel.declare_queue(server_qname, durable=True)
@@ -84,6 +88,13 @@ class AsyncAMQPClient:
                 content_type="application/json",
             ),
             routing_key=server_qname,
+        )
+
+        self.logger.info(
+            "Request: %s sent to server queue: %s with correlation_id: %s",
+            url,
+            server_qname,
+            corr_id,
         )
 
         resp = None

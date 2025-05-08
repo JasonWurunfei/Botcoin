@@ -5,8 +5,8 @@ This script is used to run a backtest using the botcoin framework.
 import asyncio
 from datetime import datetime
 
-from botcoin.data.tickers import FinnhubTicker
-from botcoin.broker.simulated import SimpleBroker
+from botcoin.services.tickers import FinnhubTicker
+from botcoin.services.broker import SimpleBroker
 from botcoin.runner import StrategyRunner
 
 from botcoin.data.dataclasses.events import TickEvent

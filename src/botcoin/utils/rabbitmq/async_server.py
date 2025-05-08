@@ -158,9 +158,9 @@ class AsyncAMQPServer:
             await asyncio.Future()
 
         finally:
-            await self.close()
+            await self.stop()
 
-    async def close(self) -> None:
+    async def stop(self) -> None:
         """
         Closes the connection to the AMQP server.
         """

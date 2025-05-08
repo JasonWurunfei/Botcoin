@@ -11,8 +11,9 @@ from botcoin.utils.log import logging
 from botcoin.utils.rabbitmq.worker import AsyncEventWorker
 
 # from botcoin.data.tickers import FinnhubTicker
-from botcoin.data.tickers import HistoricalTicker
-from botcoin.broker.simulated import SimpleBroker
+from botcoin.services.broker import SimpleBroker
+from botcoin.services.tickers import HistoricalTicker
+from botcoin.services.account import AccountService
 
 from botcoin.data.dataclasses.events import (
     TickEvent,
@@ -74,11 +75,13 @@ async def main():
     start = datetime(year=2025, month=4, day=15, hour=0, minute=0, second=0)
     end = datetime(year=2025, month=4, day=16, hour=0, minute=0, second=0)
     ticker = HistoricalTicker(start_date=start, end_date=end)
+    account_service = AccountService()
     broker = SimpleBroker()
 
     # Register the ticker service with the worker
     worker.add_coroutine(coro=ticker.start)
     worker.add_coroutine(coro=broker.start)
+    worker.add_coroutine(coro=account_service.start)
 
     # Subscribe to events
     worker.subscribe_event(TickEvent)

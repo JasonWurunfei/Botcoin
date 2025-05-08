@@ -39,7 +39,7 @@ class Event(ABC):
         )
 
     @abstractmethod
-    def to_json(self):
+    def serialize(self):
         """
         Convert the event to a JSON serializable format.
         """
@@ -69,7 +69,7 @@ class TickEvent(Event):
             + f"event_time={self.event_time.isoformat()})"
         )
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the tick event to a JSON serializable format.
         """
@@ -108,7 +108,7 @@ class RequestTickEvent(Event):
     def __repr__(self):
         return f"RequestTickEvent(symbol={self.symbol})"
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the request tick event to a JSON serializable format.
         """
@@ -141,7 +141,7 @@ class RequestStopTickEvent(Event):
     def __repr__(self):
         return f"RequestStopTickEvent(symbol={self.symbol})"
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the request stop tick event to a JSON serializable format.
         """
@@ -172,7 +172,7 @@ class StartEvent(Event):
     def __repr__(self):
         return f"StartEvent(event_time={self.event_time.isoformat()})"
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the event to a JSON serializable format.
         """
@@ -203,7 +203,7 @@ class StopEvent(Event):
     def __repr__(self):
         return f"StopEvent(event_time={self.event_time.isoformat()})"
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the event to a JSON serializable format.
         """
@@ -251,13 +251,13 @@ class PlaceOrderEvent(Event):
     def __repr__(self):
         return f"PlaceOrderEvent(order={self.order})"
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the event to a JSON serializable format.
         """
         return {
             "event_type": self.event_type,
-            "order": self.order.to_json(),
+            "order": self.order.serialize(),
         }
 
     @classmethod
@@ -285,13 +285,13 @@ class CancelOrderEvent(Event):
     def __repr__(self):
         return f"CancelOrderEvent(order={self.order})"
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the event to a JSON serializable format.
         """
         return {
             "event_type": self.event_type,
-            "order": self.order.to_json(),
+            "order": self.order.serialize(),
         }
 
     @classmethod
@@ -319,13 +319,13 @@ class ModifyOrderEvent(Event):
     def __repr__(self):
         return f"ModifyOrderEvent(modified_order={self.modified_order})"
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the event to a JSON serializable format.
         """
         return {
             "event_type": self.event_type,
-            "modified_order": self.modified_order.to_json(),
+            "modified_order": self.modified_order.serialize(),
         }
 
     @classmethod
@@ -353,13 +353,13 @@ class OrderModifiedEvent(Event):
     def __repr__(self):
         return f"OrderModifiedEvent(modified_order={self.modified_order})"
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the event to a JSON serializable format.
         """
         return {
             "event_type": self.event_type,
-            "modified_order": self.modified_order.to_json(),
+            "modified_order": self.modified_order.serialize(),
         }
 
     @classmethod
@@ -388,13 +388,13 @@ class OrderStatusEvent(Event):
     def __repr__(self):
         return f"OrderStatusEvent(order={self.order}, status={self.status.value})"
 
-    def to_json(self):
+    def serialize(self):
         """
         Convert the event to a JSON serializable format.
         """
         return {
             "event_type": self.event_type,
-            "order": self.order.to_json(),
+            "order": self.order.serialize(),
             "status": self.status.value,
         }
 

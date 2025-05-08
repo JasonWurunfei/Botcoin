@@ -4,8 +4,8 @@ import asyncio
 from datetime import datetime
 
 # from botcoin.data.tickers import FinnhubTicker
-from botcoin.data.tickers import HistoricalTicker
-from botcoin.broker.simulated import SimpleBroker
+from botcoin.services.tickers import HistoricalTicker
+from botcoin.services.broker import SimpleBroker
 
 from botcoin.data.dataclasses.order import MarketOrder, LimitOrder
 from botcoin.data.dataclasses.events import PlaceOrderEvent

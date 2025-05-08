@@ -4,7 +4,7 @@ import uuid
 from dataclasses import dataclass, field
 
 
-@dataclass(frozen=True, kw_only=True, slots=True, order=True)
+@dataclass(kw_only=True, slots=True, order=True)
 class Stock:
     """
     Represents a stock in the account.
@@ -13,6 +13,16 @@ class Stock:
     symbol: str
     quantity: int
     open_price: float
+
+    def serialize(self) -> dict:
+        """
+        Converts the stock to a JSON-compatible dictionary.
+        """
+        return {
+            "symbol": self.symbol,
+            "quantity": self.quantity,
+            "open_price": self.open_price,
+        }
 
 
 @dataclass(kw_only=True, slots=True, order=True)
@@ -51,14 +61,26 @@ class Account:
         if amount < 0:
             raise ValueError("Amount must be positive")
         if amount > self.cash:
-            raise ValueError("Insufficient cash balance")
+            raise ValueError(
+                f"Insufficient cash balance, current balance: {self.cash}, requested: {amount}."
+            )
         self.cash -= amount
 
-    def add_stock(self, stock: Stock) -> None:
+    def buy_stock(self, stock: Stock) -> None:
         """
         Adds a stock to the account.
         If the stock already exists, it updates the quantity and open price.
         """
+        # Check have enough cash to buy the stock
+        if stock.open_price <= 0:
+            raise ValueError("Stock price must be greater than zero")
+        if stock.quantity <= 0:
+            raise ValueError("Stock quantity must be greater than zero")
+        if not self.can_deduct_cash(stock.quantity * stock.open_price):
+            raise ValueError(
+                f"Insufficient cash balance, current balance: {self.cash}, "
+                + f"requested: {stock.quantity * stock.open_price}."
+            )
         if stock.symbol in self.stocks:
             existing_stock = self.stocks[stock.symbol]
             existing_stock.quantity += stock.quantity
@@ -68,21 +90,35 @@ class Account:
             ) / (existing_stock.quantity + stock.quantity)
         else:
             self.stocks[stock.symbol] = stock
+        self.cash -= stock.quantity * stock.open_price
 
-    def trade_stock(self, stock: Stock, quantity: int, price: float) -> None:
+    def sell_stock(self, symbol: str, quantity: int, price: float) -> None:
         """
         Trades certain quantity of a stock for a given price.
         """
         # Check if the stock exists in the account
-        if stock.symbol not in self.stocks:
-            raise ValueError("Stock not found in account")
+        if symbol not in self.stocks:
+            raise ValueError(f"Stock {symbol} not found in account")
+
+        # Check if the quantity is valid
+        if quantity <= 0:
+            raise ValueError("Quantity must be greater than zero")
+
+        # Check if the price is valid
+        if price <= 0:
+            raise ValueError("Price must be greater than zero")
 
         # Check if the stock quantity is sufficient
-        existing_stock = self.stocks[stock.symbol]
+        existing_stock = self.stocks[symbol]
         if quantity > existing_stock.quantity:
-            raise ValueError("Insufficient stock quantity")
+            raise ValueError(
+                f"Insufficient stock quantity, available: {existing_stock.quantity}, "
+                + f"requested: {quantity}."
+            )
 
         existing_stock.quantity -= quantity
+        if existing_stock.quantity == 0:
+            del self.stocks[symbol]
         self.cash += quantity * price
 
     def can_deduct_cash(self, amount: float) -> bool:
@@ -114,3 +150,14 @@ class Account:
         Returns the account ID.
         """
         return self.account_id
+
+    def serialize(self) -> dict:
+        """
+        Converts the account to a JSON-compatible dictionary.
+        """
+        return {
+            "account_id": self.account_id,
+            "cash": self.cash,
+            "stocks": {symbol: stock.serialize() for symbol, stock in self.stocks.items()},
+            "total_value": self.value,
+        }

@@ -20,13 +20,13 @@ from botcoin.data.dataclasses.events import (
     RequestTickEvent,
     RequestStopTickEvent,
 )
+from botcoin.services import Service
 from botcoin.data.historical import YfDataManager
-
 from botcoin.utils.rabbitmq.conn import new_connection
 from botcoin.utils.rabbitmq.event import emit_event_with_channel, EventReceiver
 
 
-class Ticker(EventReceiver, ABC):
+class Ticker(Service, EventReceiver, ABC):
     """
     Abstract base class to manage and fetch real-time price data for a list of stock symbols.
     """
@@ -38,14 +38,6 @@ class Ticker(EventReceiver, ABC):
     @abstractmethod
     async def unsubscribe(self, symbol: str) -> None:
         """Unsubscribes from a ticker symbol."""
-
-    @abstractmethod
-    async def start(self) -> None:
-        """Starts the ticker service."""
-
-    @abstractmethod
-    async def stop(self) -> None:
-        """Stops the ticker service."""
 
     async def on_event(self, event: Event) -> None:
         if isinstance(event, RequestTickEvent):

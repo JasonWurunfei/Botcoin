@@ -17,12 +17,12 @@ from botcoin.data.dataclasses.events import (
     RequestTickEvent,
     RequestStopTickEvent,
 )
-
+from botcoin.services import Service
 from botcoin.utils.rabbitmq.conn import new_connection
 from botcoin.utils.rabbitmq.event import EventReceiver, emit_event_with_channel
 
 
-class Broker(EventReceiver, ABC):
+class Broker(Service, EventReceiver, ABC):
     """
     Abstract base class for a broker.
 

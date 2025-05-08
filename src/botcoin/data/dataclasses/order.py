@@ -60,7 +60,7 @@ class Order(ABC):
             raise ValueError(f"Quantity must be greater than zero: {self.quantity}")
 
     @abstractmethod
-    def to_json(self):
+    def serialize(self):
         """
         Convert the order to a JSON serializable format.
         """
@@ -88,7 +88,7 @@ class MarketOrder(Order):
             + f" quantity={self.quantity}, direction={self.direction})"
         )
 
-    def to_json(self):
+    def serialize(self):
         return {
             "order_type": self.order_type.value,
             "order_id": self.order_id,
@@ -136,7 +136,7 @@ class LimitOrder(Order):
             + f"limit_price={self.limit_price})"
         )
 
-    def to_json(self):
+    def serialize(self):
         return {
             "order_type": self.order_type.value,
             "order_id": self.order_id,
@@ -190,7 +190,7 @@ class OcoOrder(Order):
             + f"limit_price={self.limit_price}, stop_price={self.stop_price})"
         )
 
-    def to_json(self):
+    def serialize(self):
         return {
             "order_type": self.order_type.value,
             "order_id": self.order_id,

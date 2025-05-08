@@ -66,11 +66,18 @@ RABBITMQ_USER=guest
 RABBITMQ_PASSWORD=guest
 RABBITMQ_EXCHANGE=botcoin
 
+# Account Service
+SERVICE_QUEUE=account_service
+
 # API Keys
 FINNHUB_TOKEN=your-api-key
+
+# Email
+NOTIFY_EMAIL_ADDRESS=your-email-address@example.com
+NOTIFY_EMAIL_PASSWORD=your-email-password
 ```
 
-Remember to put in your Finnhub API key. Then you can use docekr compose to run the Botcoin API.
+Remember to put in your Finnhub API key and email credentials. Then you can use docekr compose to run the Botcoin API.
 
 ```bash
 docker-compose up -d

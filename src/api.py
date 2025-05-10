@@ -19,7 +19,7 @@ from botcoin.utils.rabbitmq.async_client import AsyncAMQPClient
 
 
 load_dotenv()
-
+account_service_queue = os.getenv("SERVICE_QUEUE", "account_service")
 
 DESC = """
 Botcoint. 🚀
@@ -83,6 +83,130 @@ def risk_sell(
         "gain_percent": round(gain_percent, 2),
         "commission_fee": commission_trade_cost.calculate_cost(num_of_shares * open_price),
     }
+
+
+@app.get("/account/balance")
+async def get_account_balance() -> dict:
+    """
+    Get the account balance.
+
+    Returns:
+        dict: A message indicating that the command has been sent.
+    """
+    return await async_client.call(
+        url="/account/balance",
+        server_qname=account_service_queue,
+    )
+
+
+@app.get("/account/stocks")
+async def get_account_stocks() -> dict:
+    """
+    Get the account stocks.
+
+    Returns:
+        dict: A message indicating that the command has been sent.
+    """
+    return await async_client.call(
+        url="/account/stocks",
+        server_qname=account_service_queue,
+    )
+
+
+@app.get("/account/value")
+async def get_account_value() -> dict:
+    """
+    Get the account value.
+
+    Returns:
+        dict: A message indicating that the command has been sent.
+    """
+    return await async_client.call(
+        url="/account/value",
+        server_qname=account_service_queue,
+    )
+
+
+@app.get("/account/increase_cash")
+async def increase_cash(amount: float) -> dict:
+    """
+    Increase the account cash.
+
+    Args:
+        amount (float): The amount to increase.
+
+    Returns:
+        dict: A message indicating that the command has been sent.
+    """
+    return await async_client.call(
+        url=f"/increase_cash?amount={amount}", server_qname=account_service_queue
+    )
+
+
+@app.get("/account/decrease_cash")
+async def decrease_cash(amount: float) -> dict:
+    """
+    Decrease the account cash.
+
+    Args:
+        amount (float): The amount to decrease.
+
+    Returns:
+        dict: A message indicating that the command has been sent.
+    """
+    return await async_client.call(
+        url=f"/decrease_cash?amount={amount}", server_qname=account_service_queue
+    )
+
+
+@app.get("/account/buy_stock")
+async def buy_stock(symbol: str, quantity: int, price: float) -> dict:
+    """
+    Buy a stock.
+
+    Args:
+        symbol (str): The stock symbol.
+        quantity (int): The quantity to buy.
+        price (float): The price to buy at.
+
+    Returns:
+        dict: A message indicating that the command has been sent.
+    """
+    symbol = symbol.upper()
+    if quantity <= 0:
+        return {"error": "Quantity must be greater than zero."}
+    if price <= 0:
+        return {"error": "Price must be greater than zero."}
+
+    return await async_client.call(
+        url=f"/buy_stock?symbol={symbol}&quantity={quantity}&price={price}",
+        server_qname=account_service_queue,
+    )
+
+
+@app.get("/account/sell_stock")
+async def sell_stock(symbol: str, quantity: int, price: float) -> dict:
+    """
+    Sell a stock.
+
+    Args:
+        symbol (str): The stock symbol.
+        quantity (int): The quantity to sell.
+        price (float): The price to sell at.
+
+    Returns:
+        dict: A message indicating that the command has been sent.
+    """
+    symbol = symbol.upper()
+    if quantity <= 0:
+        return {"error": "Quantity must be greater than zero."}
+    if price <= 0:
+        return {"error": "Price must be greater than zero."}
+
+    return await async_client.call(
+        url=f"/sell_stock?symbol={symbol}&quantity={quantity}&price={price}",
+        server_qname=account_service_queue,
+    )
 
 
 @app.get("/ticker/start")

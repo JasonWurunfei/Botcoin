@@ -198,7 +198,7 @@ class AccountService(Service):
 
         self.server.register_handler(pattern="/increase_cash", handler=handle_inc_cash_req)
         self.server.register_handler(pattern="/decrease_cash", handler=handle_dec_cash_req)
-        self.server.register_handler(pattern="/add_stock", handler=handle_buy_stock_req)
+        self.server.register_handler(pattern="/buy_stock", handler=handle_buy_stock_req)
         self.server.register_handler(pattern="/sell_stock", handler=handle_sell_stock_req)
         self.server.register_handler(
             pattern="/account/balance", handler=handle_get_account_banlance

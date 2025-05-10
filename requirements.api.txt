@@ -2,3 +2,5 @@ aio-pika
 fastapi[standard]
 python-dotenv
 pytz
+aiohttp
+finnhub-python

@@ -22,6 +22,7 @@ services:
     depends_on:
       - rabbitmq
     environment:
+      - FINNHUB_TOKEN=${FINNHUB_TOKEN}
       - RABBITMQ_HOST=${RABBITMQ_HOST}
       - RABBITMQ_PORT=${RABBITMQ_PORT}
       - RABBITMQ_USER=${RABBITMQ_USER}

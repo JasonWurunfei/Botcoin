@@ -4,7 +4,6 @@ import re
 import json
 import asyncio
 from typing import Callable, Dict, Any
-from urllib.parse import urlparse, parse_qs
 
 import aio_pika
 
@@ -77,9 +76,7 @@ class AsyncAMQPServer:
             message (aio_pika.IncomingMessage): The incoming message to process.
         """
         async with message.process():
-            self.logger.info(
-                "Received message with correlation_id: %s", message.correlation_id
-            )
+            self.logger.info("Received message with correlation_id: %s", message.correlation_id)
             request = json.loads(message.body.decode())
 
             # Process the request by dispatching to the correct handler
@@ -106,17 +103,7 @@ class AsyncAMQPServer:
             dict: The response data to send back to the client.
         """
         url = request["url"]
-        # Parse the URL
-        parsed_url = urlparse(url)
-        # Extract the base URL (path)
-        base_url = parsed_url.path
-        request["base_url"] = base_url
-        # Extract the query parameters
-        query_params = parse_qs(parsed_url.query)
-        request["query_params"] = query_params
-
         self.logger.info("Dispatching request for URL: %s", url)
-
         for pattern, handler in self.handlers.items():
             if re.match(pattern, url):
                 self.logger.info("Found handler for URL: %s", url)

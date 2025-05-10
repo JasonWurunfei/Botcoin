@@ -16,10 +16,12 @@ from botcoin.data.dataclasses.events import (
 )
 from botcoin.data.dataclasses.order import MarketOrder
 from botcoin.utils.rabbitmq.async_client import AsyncAMQPClient
+from botcoin.utils.finnhub.client import FinnhubClient
 
 
 load_dotenv()
-account_service_queue = os.getenv("SERVICE_QUEUE", "account_service")
+account_service_queue = os.getenv("ACCOUNT_SERVICE_QUEUE", "account_service")
+finnhub_client = FinnhubClient()
 
 DESC = """
 Botcoint. 🚀
@@ -41,6 +43,21 @@ app = FastAPI(
 
 commission_trade_cost = CommissionTradeCost(fee_rate=0.0008, minimum_fee=1)
 async_client = AsyncAMQPClient()
+
+
+@app.get("/quote")
+async def get_quote(symbol: str) -> dict:
+    """
+    Get the quote for a given symbol.
+
+    Args:
+        symbol (str): The stock symbol.
+
+    Returns:
+        dict: A dictionary containing the quote data.
+    """
+    symbol = symbol.upper()
+    return finnhub_client.quote_sync(symbol=symbol)
 
 
 @app.get("/risk")
@@ -139,7 +156,7 @@ async def increase_cash(amount: float) -> dict:
         dict: A message indicating that the command has been sent.
     """
     return await async_client.call(
-        url=f"/increase_cash?amount={amount}", server_qname=account_service_queue
+        url="/increase_cash", query_params={"amount": amount}, server_qname=account_service_queue
     )
 
 
@@ -155,7 +172,9 @@ async def decrease_cash(amount: float) -> dict:
         dict: A message indicating that the command has been sent.
     """
     return await async_client.call(
-        url=f"/decrease_cash?amount={amount}", server_qname=account_service_queue
+        url="/decrease_cash",
+        query_params={"amount": amount},
+        server_qname=account_service_queue,
     )
 
 
@@ -179,7 +198,8 @@ async def buy_stock(symbol: str, quantity: int, price: float) -> dict:
         return {"error": "Price must be greater than zero."}
 
     return await async_client.call(
-        url=f"/buy_stock?symbol={symbol}&quantity={quantity}&price={price}",
+        url="/buy_stock",
+        query_params={"symbol": symbol, "quantity": quantity, "price": price},
         server_qname=account_service_queue,
     )
 
@@ -204,7 +224,8 @@ async def sell_stock(symbol: str, quantity: int, price: float) -> dict:
         return {"error": "Price must be greater than zero."}
 
     return await async_client.call(
-        url=f"/sell_stock?symbol={symbol}&quantity={quantity}&price={price}",
+        url="/sell_stock",
+        query_params={"symbol": symbol, "quantity": quantity, "price": price},
         server_qname=account_service_queue,
     )
 

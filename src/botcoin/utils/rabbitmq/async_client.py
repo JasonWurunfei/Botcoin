@@ -38,7 +38,7 @@ class AsyncAMQPClient:
         self.channel = await self.connection.channel()
         self.logger.info("Connection with RabbitMQ server established.")
 
-    async def call(self, url: str, server_qname: str) -> dict:
+    async def call(self, url: str, server_qname: str, query_params: dict = None) -> dict:
         """
         Sends a request message to the server with the specified URL and waits
         for the response.
@@ -46,13 +46,14 @@ class AsyncAMQPClient:
         Args:
             url (str): The URL to send as part of the request.
             server_qname (str): The name of the server queue to send for this request.
+            query_params (dict): Optional query parameters to include in the request.
 
         Returns:
             dict: The decoded JSON response from the server.
         """
         corr_id = str(uuid.uuid4())
 
-        req = {"url": url}
+        req = {"url": url, "query_params": query_params or {}}
 
         await self._reconnect_if_needed()
 

@@ -124,11 +124,13 @@ class SimpleBroker(SimulatedBroker):
         self.logger.info("SimpleBroker stopped.")
 
     async def place_order(self, order: Order) -> None:
+        # Record the order in the order book
         self._order_book[order.order_id] = OrderBookItem(
             order_id=order.order_id,
             order=order,
             status=OrderStatus.NOT_TRADED,
         )
+
         if self._is_last_order_for_symbol(order):
             self._async_client.emit_event(
                 event=RequestTickEvent(

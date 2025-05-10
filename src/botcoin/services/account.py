@@ -48,7 +48,7 @@ class AccountService(Service):
         async def handle_inc_cash_req(request: dict) -> None:
             """request handler for increasing cash"""
             try:
-                amount = float(request["query_params"]["amount"][0])
+                amount = float(request["query_params"]["amount"])
                 self._account.increase_cash(amount)
                 self.logger.info(
                     "Increased cash by %s. New cash balance: %s",
@@ -74,7 +74,7 @@ class AccountService(Service):
         async def handle_dec_cash_req(request: dict) -> None:
             """request handler for decreasing cash"""
             try:
-                amount = float(request["query_params"]["amount"][0])
+                amount = float(request["query_params"]["amount"])
                 self._account.decrease_cash(amount)
                 self.logger.info(
                     "Decreased cash by %s. New cash balance: %s",
@@ -101,9 +101,9 @@ class AccountService(Service):
             """request handler for buying stock"""
             try:
                 query_params = request["query_params"]
-                symbol = query_params["symbol"][0]
-                quantity = int(query_params["quantity"][0])
-                price = float(query_params["price"][0])
+                symbol = query_params["symbol"]
+                quantity = int(query_params["quantity"])
+                price = float(query_params["price"])
                 stock = Stock(
                     symbol=symbol,
                     quantity=quantity,
@@ -141,9 +141,9 @@ class AccountService(Service):
             """request handler for trading stock"""
             try:
                 query_params = request["query_params"]
-                symbol = query_params["symbol"][0]
-                quantity = int(query_params["quantity"][0])
-                price = float(query_params["price"][0])
+                symbol = query_params["symbol"]
+                quantity = int(query_params["quantity"])
+                price = float(query_params["price"])
                 self._account.sell_stock(symbol, quantity, price)
                 self.logger.info(
                     "Sold stock %s with quantity %s at price %s.", symbol, quantity, price

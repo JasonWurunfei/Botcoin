@@ -3,6 +3,8 @@
 import uuid
 from dataclasses import dataclass, field
 
+from botcoin.utils.finnhub.client import FinnhubClient
+
 
 @dataclass(kw_only=True, slots=True, order=True)
 class Stock:
@@ -42,8 +44,10 @@ class Account:
         Returns the total value of the account, including cash and stocks.
         """
         total_value = self.cash
+        finnhub_client = FinnhubClient()
         for stock in self.stocks.values():
-            total_value += stock.quantity * stock.open_price
+            current_price = finnhub_client.quote_sync(stock.symbol)["c"]
+            total_value += stock.quantity * current_price
         return total_value
 
     def increase_cash(self, amount: float) -> None:

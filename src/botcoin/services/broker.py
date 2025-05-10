@@ -18,8 +18,8 @@ from botcoin.data.dataclasses.events import (
     RequestStopTickEvent,
 )
 from botcoin.services import Service
-from botcoin.utils.rabbitmq.conn import new_connection
-from botcoin.utils.rabbitmq.event import EventReceiver, emit_event_with_channel
+from botcoin.utils.rabbitmq.async_client import AsyncAMQPClient
+from botcoin.utils.rabbitmq.event import EventReceiver
 
 
 class Broker(Service, EventReceiver, ABC):
@@ -111,56 +111,43 @@ class SimpleBroker(SimulatedBroker):
     logger = logging.getLogger(__qualname__)
 
     def __init__(self) -> None:
-        self.order_book: dict[str, OrderBookItem] = {}
-        self.rabbitmq_conn = None
-        self.rabbitmq_channel = None
+        self._order_book: dict[str, OrderBookItem] = {}
+        self._async_client = AsyncAMQPClient()
+        self._async_client.set_logger_name("SimpleBroker")
 
     async def start(self) -> None:
-        self.rabbitmq_conn = await new_connection()
-        self.logger.debug("RabbitMQ connection established.")
-        self.rabbitmq_channel = await self.rabbitmq_conn.channel()
+        await self._async_client.connect()
         self.logger.info("SimpleBroker started.")
 
     async def stop(self) -> None:
-        if self.rabbitmq_channel and not self.rabbitmq_channel.is_closed:
-            await self.rabbitmq_channel.close()
-            self.logger.debug("RabbitMQ channel closed.")
-        self.rabbitmq_channel = None
-
-        if self.rabbitmq_conn and not self.rabbitmq_conn.is_closed:
-            await self.rabbitmq_conn.close()
-            self.logger.debug("RabbitMQ connection closed.")
-        self.rabbitmq_conn = None
-
+        await self._async_client.close()
         self.logger.info("SimpleBroker stopped.")
 
     async def place_order(self, order: Order) -> None:
-        self.order_book[order.order_id] = OrderBookItem(
+        self._order_book[order.order_id] = OrderBookItem(
             order_id=order.order_id,
             order=order,
             status=OrderStatus.NOT_TRADED,
         )
-        await emit_event_with_channel(
-            channel=self.rabbitmq_channel,
-            event=RequestTickEvent(
-                symbol=order.symbol,
-            ),
-        )
+        if self._is_last_order_for_symbol(order):
+            self._async_client.emit_event(
+                event=RequestTickEvent(
+                    symbol=order.symbol,
+                ),
+            )
 
     async def cancel_order(self, order: Order) -> None:
-        if order.order_id in self.order_book:
-            order_book_item = self.order_book[order.order_id]
+        if order.order_id in self._order_book:
+            order_book_item = self._order_book[order.order_id]
             order_book_item.status = OrderStatus.CANCELLED
-            await emit_event_with_channel(
-                channel=self.rabbitmq_channel,
+            self._async_client.emit_event(
                 event=OrderStatusEvent(
                     order=order,
                     status=OrderStatus.CANCELLED,
                 ),
             )
             if self._is_last_order_for_symbol(order):
-                await emit_event_with_channel(
-                    channel=self.rabbitmq_channel,
+                self._async_client.emit_event(
                     event=RequestStopTickEvent(
                         symbol=order.symbol,
                     ),
@@ -171,15 +158,15 @@ class SimpleBroker(SimulatedBroker):
             self.logger.warning("Order %s not found in order book", order.order_id)
 
     async def modify_order(self, modified_order: Order) -> None:
-        if modified_order.order_id in self.order_book:
-            order_book_item = self.order_book[modified_order.order_id]
+        if modified_order.order_id in self._order_book:
+            order_book_item = self._order_book[modified_order.order_id]
             order_book_item.order = modified_order
-            await emit_event_with_channel(
-                channel=self.rabbitmq_channel,
+            self._async_client.emit_event(
                 event=OrderModifiedEvent(
                     modified_order=modified_order,
                 ),
             )
+
             self.logger.info("Order %s modified", modified_order.order_id)
         else:
             self.logger.warning(
@@ -188,10 +175,10 @@ class SimpleBroker(SimulatedBroker):
             )
 
     async def trade_order(self, order: Order, price: float) -> None:
-        order_book_item = self.order_book[order.order_id]
+        order_book_item = self._order_book[order.order_id]
         order_book_item.status = OrderStatus.TRADED
-        await emit_event_with_channel(
-            channel=self.rabbitmq_channel,
+
+        self._async_client.emit_event(
             event=OrderStatusEvent(
                 order=order,
                 status=OrderStatus.TRADED,
@@ -199,8 +186,7 @@ class SimpleBroker(SimulatedBroker):
         )
 
         if self._is_last_order_for_symbol(order):
-            await emit_event_with_channel(
-                channel=self.rabbitmq_channel,
+            self._async_client.emit_event(
                 event=RequestStopTickEvent(
                     symbol=order.symbol,
                 ),
@@ -219,9 +205,7 @@ class SimpleBroker(SimulatedBroker):
         price = tick_event.price
 
         related_orders = [
-            item.order
-            for item in self.order_book.values()
-            if item.order.symbol == symbol
+            item.order for item in self._order_book.values() if item.order.symbol == symbol
         ]
 
         for order in related_orders:
@@ -266,12 +250,6 @@ class SimpleBroker(SimulatedBroker):
         :return: True if the order is the last order for the symbol, False otherwise.
         """
         return (
-            len(
-                [
-                    item
-                    for item in self.order_book.values()
-                    if item.order.symbol == order.symbol
-                ]
-            )
+            len([item for item in self._order_book.values() if item.order.symbol == order.symbol])
             == 1
         )

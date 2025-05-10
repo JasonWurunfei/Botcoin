@@ -22,8 +22,8 @@ from botcoin.data.dataclasses.events import (
 )
 from botcoin.services import Service
 from botcoin.data.historical import YfDataManager
-from botcoin.utils.rabbitmq.conn import new_connection
-from botcoin.utils.rabbitmq.event import emit_event_with_channel, EventReceiver
+from botcoin.utils.rabbitmq.async_client import AsyncAMQPClient
+from botcoin.utils.rabbitmq.event import EventReceiver
 
 
 class Ticker(Service, EventReceiver, ABC):
@@ -63,8 +63,8 @@ class FinnhubTicker(Ticker):
         self.tz = pytz.timezone(tz)
         self.url = f"wss://ws.finnhub.io?token={api_key}"
         self.ws = None
-        self.rabbitmq_conn = None
-        self.rabbitmq_channel = None
+        self._async_client = AsyncAMQPClient()
+        self._async_client.set_logger_name("FinnhubTicker")
 
     async def start(self) -> None:
         """
@@ -72,18 +72,14 @@ class FinnhubTicker(Ticker):
         """
         try:
             self.logger.info("Finnhub ticker started.")
-            self.rabbitmq_conn = await new_connection()
-            self.rabbitmq_channel = await self.rabbitmq_conn.channel()
-            self.logger.info("RabbitMQ connection established.")
+            await self._async_client.connect()
             self.ws = await websockets.connect(self.url)
             self.logger.info("WebSocket connection established.")
 
             # Subscribe to the symbols if any are provided
             if self.symbols:
                 for symbol in self.symbols:
-                    await self.ws.send(
-                        json.dumps({"type": "subscribe", "symbol": symbol})
-                    )
+                    await self.ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
 
             async for message in self.ws:
                 json_message = json.loads(message)
@@ -140,23 +136,13 @@ class FinnhubTicker(Ticker):
                 self.logger.debug(tick_evt)
 
                 # Publish the tick event to the RabbitMQ channel
-                asyncio.create_task(
-                    emit_event_with_channel(tick_evt, self.rabbitmq_channel)
-                )
+                self._async_client.emit_event(tick_evt)
 
     async def stop(self) -> None:
         """
         Stops the ticker service and closes RabbitMQ resources.
         """
-        if self.rabbitmq_channel and not self.rabbitmq_channel.is_closed:
-            await self.rabbitmq_channel.close()
-            self.logger.debug("RabbitMQ channel closed.")
-        self.rabbitmq_channel = None
-
-        if self.rabbitmq_conn and not self.rabbitmq_conn.is_closed:
-            await self.rabbitmq_conn.close()
-            self.logger.debug("RabbitMQ connection closed.")
-        self.rabbitmq_conn = None
+        await self._async_client.close()
 
         if self.ws and not self.ws.closed:
             await self.ws.close()
@@ -196,8 +182,8 @@ class HistoricalTicker(Ticker):
         self.candle_duration = candle_duration
         self.avg_freq_per_minute = avg_freq_per_minute
         self.streaming_symbols = {}
-        self.rabbitmq_conn = None
-        self.rabbitmq_channel = None
+        self._async_client = AsyncAMQPClient()
+        self._async_client.set_logger_name("HistoricalTicker")
 
     def get_historical_data(self, symbol: str) -> pd.DataFrame:
         """
@@ -225,9 +211,7 @@ class HistoricalTicker(Ticker):
         """
         try:
             self.logger.info("Historical price ticker started.")
-            self.rabbitmq_conn = await new_connection()
-            self.rabbitmq_channel = await self.rabbitmq_conn.channel()
-            self.logger.info("RabbitMQ connection established.")
+            await self._async_client.connect()
             if self.symbols:
                 tasks = []
                 for symbol in self.symbols:
@@ -292,14 +276,12 @@ class HistoricalTicker(Ticker):
             tick_evt = TickEvent(
                 event_time=index.to_pydatetime(),
                 symbol=symbol,
-                price=row["price"],
+                price=round(row["price"], 3),  # round to 3 decimal places
             )
             self.logger.info(tick_evt)
 
             # publish the tick event to the RabbitMQ channel
-            asyncio.create_task(
-                emit_event_with_channel(tick_evt, self.rabbitmq_channel)
-            )
+            self._async_client.emit_event(tick_evt)
 
             # if real_time, sleep until the next timestamp
             if real_time and index != prices.index[-1]:
@@ -312,15 +294,7 @@ class HistoricalTicker(Ticker):
         """
         Stops the historical ticker service and closes RabbitMQ resources.
         """
-        if self.rabbitmq_channel and not self.rabbitmq_channel.is_closed:
-            await self.rabbitmq_channel.close()
-            self.logger.debug("RabbitMQ channel closed.")
-        self.rabbitmq_channel = None
-
-        if self.rabbitmq_conn and not self.rabbitmq_conn.is_closed:
-            await self.rabbitmq_conn.close()
-            self.logger.debug("RabbitMQ connection closed.")
-        self.rabbitmq_conn = None
+        await self._async_client.close()
 
         # Cancel all streaming tasks
         for symbol, task in self.streaming_symbols.items():
@@ -344,8 +318,8 @@ class FakeTicker(Ticker):
     def __init__(self, tz: str = "US/Eastern"):
         self.tz = pytz.timezone(tz)
         self.symbols = set()
-        self.rabbitmq_conn = None
-        self.rabbitmq_channel = None
+        self._async_client = AsyncAMQPClient()
+        self._async_client.set_logger_name("FakeTicker")
 
     async def subscribe(self, symbol: str) -> None:
         """
@@ -370,8 +344,7 @@ class FakeTicker(Ticker):
         """
         try:
             self.logger.info("Fake ticker started.")
-            self.rabbitmq_conn = await new_connection()
-            self.rabbitmq_channel = await self.rabbitmq_conn.channel()
+            await self._async_client.connect()
             while True:
                 if not self.symbols:
                     await asyncio.sleep(0.1)
@@ -387,9 +360,7 @@ class FakeTicker(Ticker):
                 )
 
                 self.logger.info(tick_evt)
-                asyncio.create_task(
-                    emit_event_with_channel(tick_evt, self.rabbitmq_channel)
-                )
+                self._async_client.emit_event(tick_evt)
                 await asyncio.sleep(1)
 
         finally:
@@ -399,14 +370,5 @@ class FakeTicker(Ticker):
         """
         Stops the ticker service and closes RabbitMQ resources.
         """
-        if self.rabbitmq_channel and not self.rabbitmq_channel.is_closed:
-            await self.rabbitmq_channel.close()
-            self.logger.debug("RabbitMQ channel closed.")
-        self.rabbitmq_channel = None
-
-        if self.rabbitmq_conn and not self.rabbitmq_conn.is_closed:
-            await self.rabbitmq_conn.close()
-            self.logger.debug("RabbitMQ connection closed.")
-        self.rabbitmq_conn = None
-
+        await self._async_client.close()
         self.logger.info("Fake ticker stopped.")

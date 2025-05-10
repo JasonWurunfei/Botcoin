@@ -15,7 +15,7 @@ from botcoin.data.dataclasses.events import (
     PlaceOrderEvent,
 )
 from botcoin.data.dataclasses.order import MarketOrder
-from botcoin.utils.rabbitmq.event import emit_event
+from botcoin.utils.rabbitmq.async_client import AsyncAMQPClient
 
 
 load_dotenv()
@@ -40,6 +40,7 @@ app = FastAPI(
 )
 
 commission_trade_cost = CommissionTradeCost(fee_rate=0.0008, minimum_fee=1)
+async_client = AsyncAMQPClient()
 
 
 @app.get("/risk")
@@ -80,9 +81,7 @@ def risk_sell(
         "risk_percent": round(risk_percent, 2),
         "gain_per_share": round(gain_per_share, 2),
         "gain_percent": round(gain_percent, 2),
-        "commission_fee": commission_trade_cost.calculate_cost(
-            num_of_shares * open_price
-        ),
+        "commission_fee": commission_trade_cost.calculate_cost(num_of_shares * open_price),
     }
 
 
@@ -97,7 +96,8 @@ async def start_ticker(symbol: str) -> dict:
     Returns:
         dict: A message indicating that the command has been sent.
     """
-    await emit_event(RequestTickEvent(symbol=symbol))
+    symbol = symbol.upper()
+    async_client.emit_event(RequestTickEvent(symbol=symbol))
 
     return {
         "message": f"Tick command sent for {symbol}",
@@ -115,7 +115,8 @@ async def stop_ticker(symbol: str) -> dict:
     Returns:
         dict: A message indicating that the command has been sent.
     """
-    await emit_event(RequestStopTickEvent(symbol=symbol))
+    symbol = symbol.upper()
+    async_client.emit_event(RequestStopTickEvent(symbol=symbol))
 
     return {
         "message": f"Stop tick command sent for {symbol}",
@@ -135,17 +136,24 @@ async def place_market_order(symbol: str, quantity: int, direction: str) -> dict
     Returns:
         dict: A message indicating that the order has been placed.
     """
+    symbol = symbol.upper()
+
+    if direction not in ["buy", "sell"]:
+        return {"error": "Invalid direction. Use 'buy' or 'sell'."}
+
+    if quantity <= 0:
+        return {"error": "Quantity must be greater than zero."}
 
     order = MarketOrder(
-        symbol=symbol.upper(),
+        symbol=symbol,
         quantity=quantity,
         direction=direction,
     )
 
-    await emit_event(PlaceOrderEvent(order=order))
+    async_client.emit_event(PlaceOrderEvent(order=order))
 
     return {
-        "message": f"Market order placed for {symbol.upper()} "
+        "message": f"Market order placed for {symbol} "
         + f"with quantity {quantity} and direction {direction}",
     }
 
@@ -156,7 +164,7 @@ async def start_botcoin() -> dict:
     Start Botcoin.
     """
 
-    await emit_event(StartEvent())
+    async_client.emit_event(StartEvent())
 
     return {
         "message": "Botcoin start command sent",
@@ -169,7 +177,7 @@ async def stop_botcoin() -> dict:
     Stop Botcoin.
     """
 
-    await emit_event(StopEvent())
+    async_client.emit_event(StopEvent())
 
     return {
         "message": "Botcoin stop command sent",

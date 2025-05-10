@@ -6,9 +6,7 @@ import numpy as np
 import pandas as pd
 
 
-def generate_price_stream(
-    ohlc_df, candle_duration="1min", avg_freq_per_minute=10, seed=None
-):
+def generate_price_stream(ohlc_df, candle_duration="1min", avg_freq_per_minute=10, seed=None):
     """
     Simulate real-time price updates from historical OHLC data.
 
@@ -38,12 +36,8 @@ def generate_price_stream(
         n_points = max(n_points, 4)  # ensure at least open, high, low, close
 
         # Generate random timestamps within the candle period
-        random_offsets = sorted(
-            np.random.uniform(0, duration.total_seconds(), size=n_points)
-        )
-        timestamps = [
-            start_time + timedelta(seconds=offset) for offset in random_offsets
-        ]
+        random_offsets = sorted(np.random.uniform(0, duration.total_seconds(), size=n_points))
+        timestamps = [start_time + timedelta(seconds=offset) for offset in random_offsets]
 
         # Ensure first, high, low, and last prices are in the stream
         prices = [row["Open"], row["High"], row["Low"], row["Close"]]
@@ -51,9 +45,7 @@ def generate_price_stream(
         # Fill the rest with random prices between low and high
         remaining = n_points - 4
         if remaining > 0:
-            random_prices = np.random.uniform(
-                row["Low"], row["High"], size=remaining
-            ).tolist()
+            random_prices = np.random.uniform(row["Low"], row["High"], size=remaining).tolist()
             prices.extend(random_prices)
 
         # Shuffle all prices except open, high, low, close for randomness

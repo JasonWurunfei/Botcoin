@@ -58,11 +58,11 @@ class Broker(Service, EventReceiver, ABC):
         """
 
     @abstractmethod
-    async def modify_order(self, modified_order: Order) -> None:
+    async def modify_order(self, order: Order) -> None:
         """
         This method modifies an order.
 
-        :param modified_order: The order to be modified.
+        :param order: The order to be modified.
         """
 
     async def on_event(self, event: Event) -> None:
@@ -71,7 +71,7 @@ class Broker(Service, EventReceiver, ABC):
         elif isinstance(event, CancelOrderEvent):
             asyncio.create_task(self.cancel_order(event.order))
         elif isinstance(event, ModifyOrderEvent):
-            asyncio.create_task(self.modify_order(event.modified_order))
+            asyncio.create_task(self.modify_order(event.order))
 
 
 class SimulatedBroker(Broker, ABC):
@@ -159,21 +159,21 @@ class SimpleBroker(SimulatedBroker):
         else:
             self.logger.warning("Order %s not found in order book", order.order_id)
 
-    async def modify_order(self, modified_order: Order) -> None:
-        if modified_order.order_id in self._order_book:
-            order_book_item = self._order_book[modified_order.order_id]
-            order_book_item.order = modified_order
+    async def modify_order(self, order: Order) -> None:
+        if order.order_id in self._order_book:
+            order_book_item = self._order_book[order.order_id]
+            order_book_item.order = order
             self._async_client.emit_event(
                 event=OrderModifiedEvent(
-                    modified_order=modified_order,
+                    order=order,
                 ),
             )
 
-            self.logger.info("Order %s modified", modified_order.order_id)
+            self.logger.info("Order %s modified", order.order_id)
         else:
             self.logger.warning(
                 "Order %s not found in order book for modification",
-                modified_order.order_id,
+                order.order_id,
             )
 
     async def trade_order(self, order: Order, price: float) -> None:

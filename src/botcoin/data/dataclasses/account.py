@@ -35,6 +35,7 @@ class Account:
     """
 
     cash: float = 0.0
+    reserved_cash: float = 0.0
     stocks: dict[str, Stock] = field(default_factory=dict)
     account_id: str = field(default_factory=lambda: str(uuid.uuid4()))
 
@@ -43,7 +44,7 @@ class Account:
         """
         Returns the total value of the account, including cash and stocks.
         """
-        total_value = self.cash
+        total_value = self.cash + self.reserved_cash
         finnhub_client = FinnhubClient()
         for stock in self.stocks.values():
             current_price = finnhub_client.quote_sync(stock.symbol)["c"]
@@ -131,11 +132,44 @@ class Account:
         """
         return amount <= self.cash
 
+    def reserve_cash(self, amount: float) -> None:
+        """
+        Reserves a certain amount of cash in the account.
+        """
+        if amount < 0:
+            raise ValueError("Amount must be positive")
+        if amount > self.cash:
+            raise ValueError(
+                f"Insufficient cash balance, current balance: {self.cash}, requested: {amount}."
+            )
+        self.reserved_cash += amount
+        self.cash -= amount
+
+    def release_reserved_cash(self, amount: float) -> None:
+        """
+        Releases a certain amount of reserved cash in the account.
+        """
+        if amount < 0:
+            raise ValueError("Amount must be positive")
+        if amount > self.reserved_cash:
+            raise ValueError(
+                "Insufficient reserved cash balance, current reserved balance: "
+                + f"{self.reserved_cash}, requested: {amount}."
+            )
+        self.reserved_cash -= amount
+        self.cash += amount
+
     def get_cash_balance(self) -> float:
         """
         Returns the current cash balance of the account.
         """
         return self.cash
+
+    def get_reserved_cash(self) -> float:
+        """
+        Returns the current reserved cash balance of the account.
+        """
+        return self.reserved_cash
 
     def get_stocks(self) -> dict[str, Stock]:
         """
@@ -162,6 +196,7 @@ class Account:
         return {
             "account_id": self.account_id,
             "cash": self.cash,
+            "reserved_cash": self.reserved_cash,
             "stocks": {symbol: stock.serialize() for symbol, stock in self.stocks.items()},
             "total_value": self.value,
         }

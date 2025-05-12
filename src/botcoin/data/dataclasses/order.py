@@ -1,12 +1,15 @@
 """This module contains the data classes related to orders in the botcoin framework."""
 
 import uuid
-from abc import ABC, abstractmethod
+from abc import ABC
 from enum import Enum
 from datetime import datetime
 from dataclasses import dataclass, field
+from typing import Union
 
 import pytz
+
+from botcoin.data.dataclasses import JSONSerializable
 
 US_EAST = pytz.timezone("US/Eastern")
 
@@ -40,7 +43,7 @@ class OrderType(Enum):
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
-class Order(ABC):
+class Order(JSONSerializable, ABC):
     """
     Represents an order in the botcoin framework.
     This class contains the details of an order including its ID, symbol,
@@ -59,18 +62,32 @@ class Order(ABC):
         if self.quantity <= 0:
             raise ValueError(f"Quantity must be greater than zero: {self.quantity}")
 
-    @abstractmethod
-    def serialize(self):
+    def __repr__(self):
+        return self.to_string()
+
+    def __str__(self):
+        return self.to_string()
+
+    def to_string(self):
         """
-        Convert the order to a JSON serializable format.
+        Convert the event to a string representation.
         """
 
-    @classmethod
-    @abstractmethod
-    def from_json(cls, json_data):
-        """
-        Convert JSON data to an order object.
-        """
+        child_entities = self.serialize()
+        child_entities_str = ""
+
+        for k, v in child_entities.items():
+            if k == "timestamp":
+                continue
+            if isinstance(v, Enum):
+                child_entities_str += f"{k}={v.value}, "
+                continue
+            child_entities_str += f"{k}={v}, "
+
+        return (
+            f"{self.__class__.__name__}({child_entities_str}"
+            + f"timestamp={self.timestamp.isoformat()})"
+        )
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -81,32 +98,6 @@ class MarketOrder(Order):
     """
 
     order_type: OrderType = OrderType.MARKET
-
-    def __repr__(self):
-        return (
-            f"MarketOrder(order_id={self.order_id}, symbol={self.symbol},"
-            + f" quantity={self.quantity}, direction={self.direction})"
-        )
-
-    def serialize(self):
-        return {
-            "order_type": self.order_type.value,
-            "order_id": self.order_id,
-            "symbol": self.symbol,
-            "quantity": self.quantity,
-            "direction": self.direction,
-            "timestamp": self.timestamp.isoformat(),
-        }
-
-    @classmethod
-    def from_json(cls, json_data):
-        return cls(
-            order_id=json_data["order_id"],
-            symbol=json_data["symbol"],
-            quantity=json_data["quantity"],
-            direction=json_data["direction"],
-            timestamp=datetime.fromisoformat(json_data["timestamp"]),
-        )
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -125,38 +116,7 @@ class LimitOrder(Order):
         if self.quantity <= 0:
             raise ValueError(f"Quantity must be greater than zero: {self.quantity}")
         if self.limit_price <= 0:
-            raise ValueError(
-                f"Limit price must be greater than zero: {self.limit_price}"
-            )
-
-    def __repr__(self):
-        return (
-            f"LimitOrder(order_id={self.order_id}, symbol={self.symbol}, "
-            + f"quantity={self.quantity}, direction={self.direction}, "
-            + f"limit_price={self.limit_price})"
-        )
-
-    def serialize(self):
-        return {
-            "order_type": self.order_type.value,
-            "order_id": self.order_id,
-            "symbol": self.symbol,
-            "quantity": self.quantity,
-            "direction": self.direction,
-            "limit_price": self.limit_price,
-            "timestamp": self.timestamp.isoformat(),
-        }
-
-    @classmethod
-    def from_json(cls, json_data):
-        return cls(
-            order_id=json_data["order_id"],
-            symbol=json_data["symbol"],
-            quantity=json_data["quantity"],
-            direction=json_data["direction"],
-            limit_price=json_data["limit_price"],
-            timestamp=datetime.fromisoformat(json_data["timestamp"]),
-        )
+            raise ValueError(f"Limit price must be greater than zero: {self.limit_price}")
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -177,42 +137,24 @@ class OcoOrder(Order):
         if self.quantity <= 0:
             raise ValueError(f"Quantity must be greater than zero: {self.quantity}")
         if self.limit_price <= 0:
-            raise ValueError(
-                f"Limit price must be greater than zero: {self.limit_price}"
-            )
+            raise ValueError(f"Limit price must be greater than zero: {self.limit_price}")
         if self.stop_price <= 0:
             raise ValueError(f"Stop price must be greater than zero: {self.stop_price}")
 
-    def __repr__(self):
-        return (
-            f"OcoOrder(order_id={self.order_id}, symbol={self.symbol}, "
-            + f"quantity={self.quantity}, direction={self.direction}, "
-            + f"limit_price={self.limit_price}, stop_price={self.stop_price})"
-        )
 
-    def serialize(self):
-        return {
-            "order_type": self.order_type.value,
-            "order_id": self.order_id,
-            "symbol": self.symbol,
-            "quantity": self.quantity,
-            "direction": self.direction,
-            "limit_price": self.limit_price,
-            "stop_price": self.stop_price,
-            "timestamp": self.timestamp.isoformat(),
-        }
+def deserialize_order(order_data: dict) -> Union[MarketOrder, LimitOrder, OcoOrder]:
+    """
+    Deserialize order data to an order object.
+    """
+    order_type = order_data.get("order_type")
+    if order_type == "market":
+        return MarketOrder.from_dict(order_data)
+    if order_type == "limit":
+        return LimitOrder.from_dict(order_data)
+    if order_type == "oco":
+        return OcoOrder.from_dict(order_data)
 
-    @classmethod
-    def from_json(cls, json_data):
-        return cls(
-            order_id=json_data["order_id"],
-            symbol=json_data["symbol"],
-            quantity=json_data["quantity"],
-            direction=json_data["direction"],
-            limit_price=json_data["limit_price"],
-            stop_price=json_data["stop_price"],
-            timestamp=datetime.fromisoformat(json_data["timestamp"]),
-        )
+    raise ValueError(f"Invalid order type: {order_type}")
 
 
 @dataclass(kw_only=True, slots=True, order=True)
@@ -227,6 +169,6 @@ class OrderBookItem:
 
     def __repr__(self):
         return (
-            f"OrderBookItem(order_id={self.order_id}, order={self.order}, "
+            f"OrderBookItem(order_id={self.order_id}, order={self.order.order_id}, "
             + f"status={self.status.value})"
         )

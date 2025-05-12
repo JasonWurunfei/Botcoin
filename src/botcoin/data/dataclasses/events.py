@@ -1,6 +1,5 @@
 """This module contains the event data classes used in the botcoin framework."""
 
-import json
 from abc import ABC
 from datetime import datetime
 from typing import Optional, ClassVar, override
@@ -68,15 +67,15 @@ class Event(JSONSerializable, ABC):
     @classmethod
     def _validate(cls, dict_data: dict) -> None:
         """
-        Validate the event type in the JSON data.
+        Validate the event type in the object data.
         """
         obj_type = dict_data.get("event_type")
         if obj_type is None:
-            raise ValueError("Missing 'event_type' in JSON data")
+            raise ValueError("Missing 'event_type' in the object data")
         if cls.cls_event_type != obj_type:
             raise ValueError(f"Invalid event type: {obj_type}. Expected: {cls.cls_event_type}")
         if "event_time" not in dict_data:
-            raise ValueError("Missing 'event_time' in object data")
+            raise ValueError("Missing 'event_time' in the object data")
 
     @override
     @classmethod
@@ -154,11 +153,11 @@ class OrderEvent(Event, ABC):
     @classmethod
     def _validate(cls, dict_data: dict) -> None:
         """
-        Validate the event type in the JSON data.
+        Validate the event type in the object data.
         """
         super(OrderEvent, cls)._validate(dict_data)
         if "order" not in dict_data:
-            raise ValueError("Missing 'order' in JSON data")
+            raise ValueError("Missing 'order' in the object data")
         order = dict_data.get("order")
         if not isinstance(order, dict):
             raise ValueError("'order' must be a dictionary")
@@ -170,8 +169,10 @@ class OrderEvent(Event, ABC):
         Convert dictionary data to an order event object.
         """
         cls._validate(dict_data)
+        event = super(OrderEvent, cls).from_dict(dict_data)
         order = deserialize_order(dict_data.get("order"))
-        return cls(order=order)
+        object.__setattr__(event, "order", order)
+        return event
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
@@ -227,11 +228,29 @@ class OrderStatusEvent(Event):
 
     @override
     @classmethod
+    def _validate(cls, dict_data: dict) -> None:
+        """
+        Validate the event type in the object data.
+        """
+        super(OrderStatusEvent, cls)._validate(dict_data)
+        if "order" not in dict_data:
+            raise ValueError("Missing 'order' in the object data")
+        order = dict_data.get("order")
+        if not isinstance(order, dict):
+            raise ValueError("'order' must be a dictionary")
+        if "status" not in dict_data:
+            raise ValueError("Missing 'status' in the object data")
+
+    @override
+    @classmethod
     def from_dict(cls, dict_data: dict) -> "OrderStatusEvent":
         """
         Convert dictionary data to an order status event object.
         """
         cls._validate(dict_data)
+        event = super(OrderStatusEvent, cls).from_dict(dict_data)
         order = deserialize_order(dict_data.get("order"))
         status = OrderStatus(dict_data.get("status"))
-        return cls(order=order, status=status)
+        object.__setattr__(event, "status", status)
+        object.__setattr__(event, "order", order)
+        return event

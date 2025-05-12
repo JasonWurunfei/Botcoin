@@ -85,13 +85,6 @@ class Serializable(ABC):
         return cls(**kwargs)
 
 
-def is_serializable(type_: type) -> bool:
-    """
-    Check if a class is the subclass of Serializable.
-    """
-    return issubclass(type_, Serializable)
-
-
 class JSONSerializable(Serializable, ABC):
     """
     Abstract base class for serializable objects.

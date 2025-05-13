@@ -21,6 +21,9 @@ class AsyncAMQPClient:
     response is matched based on this ID.
     """
 
+    EMIT_TASK_LIMIT = 500
+    MAX_UNFINISHED_TASKS = 20
+
     def __init__(self) -> None:
         """
         Initializes the AMQPClient with the server's hostname and queue name.
@@ -28,6 +31,7 @@ class AsyncAMQPClient:
         self.connection = None
         self.channel = None
         self.logger = logging.getLogger("AsyncAMQPClient")
+        self.emit_tasks = []
 
     async def connect(self):
         """
@@ -97,6 +101,7 @@ class AsyncAMQPClient:
         event: Event,
         routing_key: str = "",
         exchange_name: str = None,
+        quite: bool = False,
     ) -> None:
         """
         Emit an event to RabbitMQ. By default, it uses the exchange defined in
@@ -110,6 +115,7 @@ class AsyncAMQPClient:
             event (Event): The event to be emitted.
             routing_key (str): The routing key for the event.
             exchange_name (str): The name of the exchange to publish the event to.
+            quite (bool): If True, suppresses logging.
         """
 
         async def emit() -> None:
@@ -125,10 +131,19 @@ class AsyncAMQPClient:
             )
 
             await exchange.publish(message, routing_key=routing_key)
+            if not quite:
+                self.logger.info("Event emitted: %s", event)
 
-            self.logger.info("Event emitted: %s", event)
+        if len(self.emit_tasks) >= self.EMIT_TASK_LIMIT:
+            unfinished_tasks = [task for task in self.emit_tasks if not task.done()]
+            if len(unfinished_tasks) > self.MAX_UNFINISHED_TASKS:
+                raise RuntimeError(
+                    f"Emit tasks cumulative limit {self.MAX_UNFINISHED_TASKS} reached."
+                )
 
-        asyncio.create_task(emit())
+            self.emit_tasks = unfinished_tasks
+
+        self.emit_tasks.append(asyncio.create_task(emit()))
 
     async def _reconnect_if_needed(self) -> None:
         """
@@ -145,6 +160,14 @@ class AsyncAMQPClient:
         """
         Closes the connection to the AMQP server.
         """
+        # Wait for all emit tasks to finish
+        unfinished_tasks = [task for task in self.emit_tasks if not task.done()]
+        if len(unfinished_tasks) > 0:
+            self.logger.info("Waiting for %s emit tasks to finish.", len(unfinished_tasks))
+            await asyncio.gather(*unfinished_tasks, return_exceptions=True)
+        else:
+            self.logger.info("No emit tasks to wait for.")
+
         if self.channel and not self.channel.is_closed:
             await self.channel.close()
             self.logger.debug("RabbitMQ channel closed.")

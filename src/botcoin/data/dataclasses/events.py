@@ -88,6 +88,17 @@ class Event(JSONSerializable, ABC):
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class TimeStepEvent(Event):
+    """
+    Represents a time step event in the botcoin framework.
+    This event is used to notify the system about a time step.
+    """
+
+    cls_event_type: ClassVar[str] = "time_step"
+    timestamp: float
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class TickEvent(Event):
     """
     Represents a market tick event.

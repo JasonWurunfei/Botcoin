@@ -36,6 +36,12 @@ class Stepper(Service):
         self._start_time = None
         self.sim_time: float = self.from_
 
+        self._just_slept: bool = False
+        self._before_sleep: float = None
+        self.sleep_adjustment: float = 1
+        self._planned_sleep_duration = None
+        self._adjust_freq = 100  # Adjust the padding time every 100 iterations
+
     def estimate_real_time(self) -> float:
         """
         Estimates the real time taken for the simulation.
@@ -69,6 +75,16 @@ class Stepper(Service):
                     self.logger.info("Simulation time reached the end time.")
                     break
 
+                # Dynamically adjust the padding time based on the ratio of planned
+                # sleep duration to the actual elapsed time since the last sleep.
+                if iteration % self._adjust_freq == 0:
+                    if self._just_slept:
+                        # If we just slept, we need to reset the flag
+                        self._just_slept = False
+                        # Calculate the time adjustment
+                        elapsed_time = time.perf_counter() - self._before_sleep
+                        self.sleep_adjustment = self._planned_sleep_duration / elapsed_time
+
                 # Emit the TimeStep Event
                 self.emit_time_step_event(time.perf_counter())
 
@@ -78,7 +94,10 @@ class Stepper(Service):
                     # We are ahead of the target time, so we need to sleep
                     sleep_duration = target_time - now
                     if sleep_duration > 0:
-                        await asyncio.sleep(sleep_duration)
+                        self._before_sleep = time.perf_counter()
+                        self._planned_sleep_duration = sleep_duration
+                        await asyncio.sleep(sleep_duration * self.sleep_adjustment)
+                        self._just_slept = True
 
                 iteration += 1
 

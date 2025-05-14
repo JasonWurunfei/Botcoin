@@ -3,7 +3,7 @@
 import uuid
 from dataclasses import dataclass, field
 
-from botcoin.utils.finnhub.client import FinnhubClient
+from botcoin.data.finnhub.client import FinnhubClient
 
 
 @dataclass(kw_only=True, slots=True, order=True)

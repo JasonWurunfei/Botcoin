@@ -16,7 +16,7 @@ from botcoin.data.dataclasses.events import (
 )
 from botcoin.data.dataclasses.order import MarketOrder
 from botcoin.utils.rabbitmq.async_client import AsyncAMQPClient
-from botcoin.utils.finnhub.client import FinnhubClient
+from botcoin.data.finnhub.client import FinnhubClient
 
 
 load_dotenv()

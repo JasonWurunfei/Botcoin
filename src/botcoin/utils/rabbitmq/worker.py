@@ -60,9 +60,7 @@ class AsyncEventWorker:
         """
 
         # Get class name and method name
-        class_name = (
-            coro.__self__.__class__.__name__ if hasattr(coro, "__self__") else None
-        )
+        class_name = coro.__self__.__class__.__name__ if hasattr(coro, "__self__") else None
         method_name = coro.__name__
 
         async def wrapper():
@@ -78,9 +76,7 @@ class AsyncEventWorker:
             except asyncio.CancelledError:
 
                 if class_name:
-                    self.logger.info(
-                        "Coroutine %s.%s was cancelled.", class_name, method_name
-                    )
+                    self.logger.info("Coroutine %s.%s was cancelled.", class_name, method_name)
                 else:
                     self.logger.info("Coroutine %s was cancelled.", method_name)
             except Exception as e:
@@ -135,9 +131,9 @@ class AsyncEventWorker:
         Args:
             event_class: The event class to be registered.
         """
-        if event_class.event_type not in self.events:
-            self.events[event_class.event_type] = event_class
-            self.logger.info("Event registered: %s", event_class.event_type)
+        if event_class.cls_event_type not in self.events:
+            self.events[event_class.cls_event_type] = event_class
+            self.logger.info("Event registered: %s", event_class.cls_event_type)
 
     def remove_event(self, event_type: str) -> None:
         """
@@ -204,8 +200,7 @@ class AsyncEventWorker:
 
                     # Check if the event type is registered
                     elif event_type in self.events:
-                        event = self.events[event_type].from_json(body)
-                        self.logger.info("Received event: %s", event)
+                        event = self.events[event_type].from_dict(body)
                         await self.worker_queue.put(event)
                     else:
                         self.logger.warning("Unknown event type: %s", event_type)

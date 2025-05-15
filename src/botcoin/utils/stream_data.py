@@ -6,7 +6,9 @@ import numpy as np
 import pandas as pd
 
 
-def generate_price_stream(ohlc_df, candle_duration="1min", avg_freq_per_minute=10, seed=None):
+def generate_price_stream(
+    ohlc_df, candle_duration="1min", avg_freq_per_minute=10, seed=None
+) -> pd.DataFrame:
     """
     Simulate real-time price updates from historical OHLC data.
 
@@ -18,7 +20,7 @@ def generate_price_stream(ohlc_df, candle_duration="1min", avg_freq_per_minute=1
         seed (int): Random seed for reproducibility.
 
     Returns:
-        pd.DataFrame: DataFrame with ['DatetimeIndex', 'price'].
+        pd.DataFrame: DataFrame with ['timestamp', 'price'].
     """
     if seed is not None:
         np.random.seed(seed)
@@ -50,6 +52,9 @@ def generate_price_stream(ohlc_df, candle_duration="1min", avg_freq_per_minute=1
 
         # Shuffle all prices except open, high, low, close for randomness
         np.random.shuffle(prices[1:-1])  # keep open at start and close at end
+
+        # convert datetime to timestamp
+        timestamps = [pd.Timestamp(ts).timestamp() for ts in timestamps]
 
         # Pair timestamps with sorted (by time) prices
         stream = list(zip(timestamps, prices))

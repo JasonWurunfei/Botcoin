@@ -3,7 +3,7 @@
 import json
 import random
 import asyncio
-from typing import Optional
+from typing import Optional, override
 from datetime import datetime
 from abc import ABC, abstractmethod
 
@@ -19,6 +19,7 @@ from botcoin.data.dataclasses.events import (
     TickEvent,
     RequestTickEvent,
     RequestStopTickEvent,
+    TimeStepEvent,
 )
 from botcoin.services import Service
 from botcoin.data.historical import YfDataManager
@@ -274,7 +275,7 @@ class HistoricalTicker(Ticker):
         for index, row in prices.iterrows():
             # create a tick event
             tick_evt = TickEvent(
-                event_time=index.to_pydatetime(),
+                event_time=pd.to_datetime(index, unit="s"),
                 symbol=symbol,
                 price=round(row["price"], 3),  # round to 3 decimal places
             )
@@ -372,3 +373,158 @@ class FakeTicker(Ticker):
         """
         await self._async_client.close()
         self.logger.info("Fake ticker stopped.")
+
+
+class SimulatedTicker(Ticker):
+    """
+    A class to manage and fetch simulated price data for a list of stock symbols.
+    """
+
+    logger = logging.getLogger(__qualname__)
+
+    def __init__(self, from_: datetime, to: datetime, tz: str = "US/Eastern"):
+        """
+        Initializes the simulated ticker with a time range and timezone.
+
+        Args:
+            from_ (datetime): The start date and time for the simulation.
+            to (datetime): The end date and time for the simulation.
+            tz (str): The timezone for the simulation. Default is "US/Eastern".
+        """
+
+        self.tz = pytz.timezone(tz)
+        self.symbols = {}
+        self._async_client = AsyncAMQPClient()
+        self._async_client.set_logger_name("SimulatedTicker")
+        self.from_ = from_
+        self.to = to
+
+        # loaclize the start and end dates
+        self.from_ = self.tz.localize(self.from_)
+        self.to = self.tz.localize(self.to)
+
+    async def start(self) -> None:
+        """
+        Starts the simulated ticker service.
+        """
+        try:
+            self.logger.info("Simulated ticker started.")
+            await self._async_client.connect()
+
+            await asyncio.Event().wait()  # blocks forever
+
+        finally:
+            await self.stop()
+
+    async def stop(self):
+        """
+        Stops the simulated ticker service and closes RabbitMQ resources.
+        """
+        await self._async_client.close()
+        self.logger.info("Simulated ticker stopped.")
+
+    def _get_historical_data(self, symbol: str) -> pd.DataFrame:
+        """
+        Fetches historical data for the given symbol.
+        """
+        hdm = YfDataManager(symbol=symbol)
+        df = hdm.get_data(start=self.from_, end=self.to)
+        return df
+
+    def _generate_price_stream(self, symbol: str) -> pd.DataFrame:
+        """
+        Generates a price stream from historical data for the given symbol.
+        """
+        df = self._get_historical_data(symbol)
+        prices = generate_price_stream(
+            df,
+            candle_duration="1min",
+            avg_freq_per_minute=12,
+        )
+        return prices
+
+    def get_price_generator(self, symbol: str, timestamp: float):
+        """
+        Returns a generator that yields price data for the given symbol.
+        the price data will be generated after the given timestamp.
+        Args:
+            symbol (str): The stock symbol to fetch price data for.
+            timestamp (float): The timestamp after which to start generating price data.
+        """
+        prices = self._generate_price_stream(symbol)
+
+        # Filter the prices to only include those after the given timestamp
+        prices = prices[prices.index > timestamp]
+        if prices.empty:
+            raise ValueError(f"No price data available for {symbol} after {timestamp}")
+
+        for index, row in prices.iterrows():
+            yield (index, row["price"])
+
+    async def subscribe(self, symbol: str) -> None:
+        """
+        Subscribes to a new ticker symbol.
+        """
+        if symbol not in self.symbols:
+            self.symbols[symbol] = {
+                "next_timestamp": None,
+                "next_price": None,
+                "generator": None,
+            }
+            self.logger.info("Subscribed to %s", symbol)
+
+    async def unsubscribe(self, symbol: str) -> None:
+        """
+        Unsubscribes from a symbol.
+        """
+        if symbol in self.symbols:
+            del self.symbols[symbol]
+            self.logger.info("Unsubscribed from %s", symbol)
+        else:
+            self.logger.warning("Symbol %s not found in subscribed symbols.", symbol)
+
+    async def tick(self, timestamp: float) -> None:
+        """
+        Generates a tick event for the given timestamp.
+        """
+        for symbol, data in self.symbols.items():
+            generator = data.get("generator")
+
+            # if the generator is not initialized, before first tick
+            if generator is None:
+                generator = self.get_price_generator(symbol, timestamp)
+                ts, price = next(generator)
+                data["generator"] = generator
+                data["next_price"] = price
+                data["next_timestamp"] = ts
+                continue
+
+            next_timestamp = data.get("next_timestamp")
+            if timestamp > next_timestamp:
+                # if the current timestamp is greater than the next timestamp
+                # create a tick event
+                ts = next_timestamp
+                price = data["next_price"]
+                tick_evt = TickEvent(
+                    event_time=datetime.fromtimestamp(ts, tz=self.tz),
+                    symbol=symbol,
+                    price=round(price, 3),  # round to 3 decimal places
+                )
+                self.logger.info(tick_evt)
+
+                # publish the tick event to the RabbitMQ channel
+                self._async_client.emit_event(tick_evt)
+
+                # Get the next price and timestamp
+                try:
+                    data["next_timestamp"], data["next_price"] = next(generator)
+                except StopIteration as e:
+                    # if the generator is exhausted, remove the symbol from the list
+                    self.logger.info("Simulation for %s finished", symbol)
+                    raise e
+
+    @override
+    async def on_event(self, event: Event) -> None:
+        await super().on_event(event)
+        if isinstance(event, TimeStepEvent):
+            asyncio.create_task(self.tick(event.timestamp))

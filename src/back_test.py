@@ -1,46 +1,107 @@
-"""
-This script is used to run a backtest using the botcoin framework.
-"""
+"""This script is used to start the Botcoin application."""
 
+import os
+import signal
 import asyncio
 from datetime import datetime
 
-from botcoin.services.tickers import FinnhubTicker
-from botcoin.services.broker import SimpleBroker
-from botcoin.runner import StrategyRunner
+from dotenv import load_dotenv
 
-from botcoin.data.dataclasses.events import TickEvent
+from botcoin.utils.log import logging
+from botcoin.utils.rabbitmq.worker import AsyncEventWorker
 
 
-ticker = FinnhubTicker(["MSTR"])
+from botcoin.services.stepper import Stepper
+from botcoin.services.tickers import SimulatedTicker
 
-broker = SimpleBroker(ticker)
-broker_queue = broker.get_queue()
+from botcoin.data.dataclasses.events import (
+    TickEvent,
+    TimeStepEvent,
+    RequestTickEvent,
+    SimStartEvent,
+    SimStopEvent,
+)
 
-runner_queue = asyncio.Queue()
-sr = StrategyRunner(runner_queue=runner_queue, broker_queue=broker_queue)
-ticker_queue = ticker.get_broadcast_queue()
-ticker_queue.register(runner_queue)
+load_dotenv()
+RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
+RABBITMQ_PASS = os.getenv("RABBITMQ_PASSWORD", "guest")
+RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
+RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
+RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "botcoin")
+
+stop_event = asyncio.Event()
+
+logger = logging.getLogger("start_botcoin")
+
+
+def shutdown():
+    """
+    Signal handler to set the stop event when a shutdown signal is received.
+    """
+    logger.info("Received shutdown signal. Stopping...")
+    stop_event.set()
 
 
 async def main():
-    """ "Main function to run the backtest."""
-    task = asyncio.gather(
-        # ticker.connect(),  # uncomment this when you want live data
-        broker.run(),
-        sr.run(),
-    )
-    print("Starting broker and strategy runner...")
-    await asyncio.sleep(1)  # Give some time for the broker and strategy runner to start
+    """
+    Main function to start the Botcoin application.
+    """
+    # Register shutdown signal handlers
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, shutdown)
 
-    # Simulate a price tick
-    tick = TickEvent(
-        symbol="MSTR", price=100.0, event_time=datetime.now(ticker.tz)  # Example price
+    # Initialize the worker
+    worker_queue = asyncio.Queue()
+    worker = AsyncEventWorker(
+        worker_queue=worker_queue,
+        rabbitmq_user=RABBITMQ_USER,
+        rabbitmq_pass=RABBITMQ_PASS,
+        rabbitmq_host=RABBITMQ_HOST,
+        rabbitmq_qname="botcoin_worker",
+        rabbitmq_exchange=RABBITMQ_EXCHANGE,
+        rabbitmq_port=RABBITMQ_PORT,
     )
-    await ticker_queue.publish(tick)
-    print("Published price tick:", tick)
 
-    await task
+    # Set up simulation time frame
+    start = datetime(year=2025, month=5, day=13, hour=9, minute=31, second=0)
+    end = datetime(year=2025, month=5, day=13, hour=10, minute=30, second=0)
+
+    # Service initialization
+    stepper = Stepper(from_=start, to=end, speed=100, freq=100)
+    ticker = SimulatedTicker(from_=start, to=end)
+
+    # Register the ticker service with the worker
+    worker.add_coroutine(coro=stepper.start)
+    worker.add_coroutine(coro=ticker.start)
+
+    # Subscribe to events
+    worker.subscribe_event(TickEvent)
+    worker.subscribe_event(TimeStepEvent)
+    worker.subscribe_event(SimStopEvent)
+    worker.subscribe_event(SimStartEvent)
+    worker.subscribe_event(RequestTickEvent)
+
+    # Start the worker
+    worker_task = asyncio.create_task(worker.start())
+
+    try:
+        # Main event loop
+        while not stop_event.is_set():
+            try:
+                event = await asyncio.wait_for(worker.worker_queue.get(), timeout=1.0)
+                asyncio.create_task(stepper.on_event(event))
+                asyncio.create_task(ticker.on_event(event))
+            except asyncio.TimeoutError:
+                continue  # Check for stop_event periodically
+    finally:
+        # Cleanup
+        await ticker.stop()
+        await stepper.stop()
+        await worker.stop()
+        if worker_task:
+            await worker_task
+        logger.info("Worker stopped.")
 
 
 if __name__ == "__main__":

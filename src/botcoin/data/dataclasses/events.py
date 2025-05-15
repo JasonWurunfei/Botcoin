@@ -152,6 +152,24 @@ class StopEvent(Event):
 
 
 @dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class SimStartEvent(Event):
+    """
+    Represents the start event for the simulation.
+    """
+
+    cls_event_type: ClassVar[str] = "sim_start"
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
+class SimStopEvent(Event):
+    """
+    Represents the stop event for the simulation.
+    """
+
+    cls_event_type: ClassVar[str] = "sim_stop"
+
+
+@dataclass(frozen=True, kw_only=True, slots=True, order=True)
 class OrderEvent(Event, ABC):
     """
     Represents an event related to an order.

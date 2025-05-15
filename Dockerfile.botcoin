@@ -20,4 +20,4 @@ RUN chmod +x ./wait-for-it.sh ./wait-rabbitmq.sh
 ENTRYPOINT [ "/app/wait-rabbitmq.sh" ]
 
 WORKDIR /app/src
-CMD ["python", "start_botcoin.py"]
+CMD ["python", "back_test.py"]

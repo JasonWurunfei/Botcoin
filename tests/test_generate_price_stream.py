@@ -4,6 +4,7 @@ import unittest
 from datetime import datetime, timedelta
 
 import pandas as pd
+from pandas.api.types import is_float_dtype
 
 from botcoin.utils.stream_data import generate_price_stream
 
@@ -43,7 +44,7 @@ class TestGeneratePriceStream(unittest.TestCase):
             seed=self.seed,
         )
         self.assertIn("price", stream.columns)
-        self.assertIsInstance(stream.index, pd.DatetimeIndex)
+        self.assertTrue(is_float_dtype(stream.index))
 
     def test_contains_open_high_low_close(self):
         """Test if the generated price stream contains the OHLC values."""
@@ -67,10 +68,13 @@ class TestGeneratePriceStream(unittest.TestCase):
             avg_freq_per_minute=self.avg_freq_per_minute,
             seed=self.seed,
         )
+        # Convert float UNIX timestamps to pandas Timestamps
+        timestamps = pd.to_datetime(stream.index, unit="s")
+
         start = self.ohlc_df.index[0]
         end = start + timedelta(minutes=1)
-        self.assertGreaterEqual(stream.index.min(), start)
-        self.assertLessEqual(stream.index.max(), end)
+        self.assertGreaterEqual(timestamps.min(), start)
+        self.assertLessEqual(timestamps.max(), end)
 
     def test_minimum_number_of_prices(self):
         """Test if the generated price stream has a minimum number of prices."""

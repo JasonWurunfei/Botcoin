@@ -10,6 +10,8 @@ from botcoin.cost.trade import CommissionTradeCost
 from botcoin.data.dataclasses.events import (
     StartEvent,
     StopEvent,
+    SimStartEvent,
+    SimStopEvent,
     RequestTickEvent,
     RequestStopTickEvent,
     PlaceOrderEvent,
@@ -265,6 +267,36 @@ async def stop_ticker(symbol: str) -> dict:
 
     return {
         "message": f"Stop tick command sent for {symbol}",
+    }
+
+
+@app.get("/sim/start")
+async def start_simulation() -> dict:
+    """
+    Start the simulation.
+
+    Returns:
+        dict: A message indicating that the command has been sent.
+    """
+    async_client.emit_event(SimStartEvent())
+
+    return {
+        "message": "Simulation start command sent",
+    }
+
+
+@app.get("/sim/stop")
+async def stop_simulation() -> dict:
+    """
+    Stop the simulation.
+
+    Returns:
+        dict: A message indicating that the command has been sent.
+    """
+    async_client.emit_event(SimStopEvent())
+
+    return {
+        "message": "Simulation stop command sent",
     }
 
 

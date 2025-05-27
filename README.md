@@ -54,6 +54,9 @@ You need to set the following environment variables in `.env` file.
 LOG_LEVEL=INFO
 PYTHONPATH=./src
 
+# Data Manager
+DATA_FOLDER=./data
+
 ## FastAPI
 FASTAPI_HOST=0.0.0.0
 FASTAPI_PORT=8000

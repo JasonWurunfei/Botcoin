@@ -11,6 +11,7 @@ import yfinance as yf
 from dotenv import load_dotenv
 
 from botcoin.utils.log import logging
+from botcoin.exceptions.data import YfDataRetrievalError
 
 
 # Load variables from .env file into environment
@@ -129,6 +130,11 @@ class YfDataProvider(DataProvider):
         if not df.empty:
             df.index = pd.to_datetime(df.index)
             df.index = df.index.tz_convert(self.tz)
+        else:
+            raise YfDataRetrievalError(
+                f"Failed to retrieve data for {symbol} from {start} to {end} with"
+                + f" granularity {granularity.value}."
+            )
 
         return df
 

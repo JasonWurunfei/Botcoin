@@ -224,53 +224,53 @@ class DataManager:
 
         # fetch new data and merge it with the local data
         self.logger.debug("Fetching new data and merging with local data.")
-        df = None
+        res_df = None
         if start_date + timedelta(days=1) < end_date:  # query for more than a single day
             if start_date >= local_end_date:
                 # If the start date is after the last local data, fetch new data
                 new_df = self.dp.get_ohlcv(symbol, local_end_date, end_date, granularity)
-                df = pd.concat([df, new_df])
-                self._save_local_data(df, symbol, granularity)
+                res_df = pd.concat([df, new_df])
+                self._save_local_data(res_df, symbol, granularity)
 
             if end_date <= local_start_date:
                 # If the end date is before the first local data, fetch new data
                 new_df = self.dp.get_ohlcv(symbol, start_date, local_start_date, granularity)
-                df = pd.concat([new_df, df])
-                self._save_local_data(df, symbol, granularity)
+                res_df = pd.concat([new_df, df])
+                self._save_local_data(res_df, symbol, granularity)
 
             if start_date < local_start_date <= end_date <= local_end_date:
                 # If the start is before the local data and end is within the local data
                 new_df = self.dp.get_ohlcv(symbol, start_date, local_start_date, granularity)
-                df = pd.concat([new_df, df])
-                self._save_local_data(df, symbol, granularity)
+                res_df = pd.concat([new_df, df])
+                self._save_local_data(res_df, symbol, granularity)
 
             if local_start_date <= start_date < local_end_date < end_date:
                 # If the start is after the local data and end is beyond the local data
                 new_df = self.dp.get_ohlcv(symbol, local_end_date, end_date, granularity)
-                df = pd.concat([df, new_df])
-                self._save_local_data(df, symbol, granularity)
+                res_df = pd.concat([df, new_df])
+                self._save_local_data(res_df, symbol, granularity)
 
             if start_date < local_start_date and end_date > local_end_date:
                 # If the requested range is wider than the local data, fetch new data
                 new_df_left = self.dp.get_ohlcv(symbol, start_date, local_start_date, granularity)
                 new_df_right = self.dp.get_ohlcv(symbol, local_end_date, end_date, granularity)
-                df = pd.concat([new_df_left, df, new_df_right])
-                self._save_local_data(df, symbol, granularity)
+                res_df = pd.concat([new_df_left, df, new_df_right])
+                self._save_local_data(res_df, symbol, granularity)
 
         else:  # query for a single day
             if start_date < local_start_date:
                 # If the start date is before the first local data, fetch new data
                 new_df = self.dp.get_ohlcv(symbol, start_date, local_start_date, granularity)
-                df = pd.concat([new_df, df])
-                self._save_local_data(df, symbol, granularity)
+                res_df = pd.concat([new_df, df])
+                self._save_local_data(res_df, symbol, granularity)
 
             if start_date >= local_end_date:
                 # If the end date is after the last local data, fetch new data
                 new_df = self.dp.get_ohlcv(symbol, local_end_date, end_date, granularity)
-                df = pd.concat([df, new_df])
-                self._save_local_data(df, symbol, granularity)
+                res_df = pd.concat([df, new_df])
+                self._save_local_data(res_df, symbol, granularity)
 
-        return df
+        return res_df
 
     def _get_local_data(self, symbol: str, granularity: TimeGranularity) -> pd.DataFrame:
         """

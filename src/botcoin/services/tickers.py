@@ -190,8 +190,10 @@ class HistoricalTicker(Ticker):
         """
         Fetches historical data for the given symbol.
         """
-        hdm = YfDataManager(symbol=symbol)
-        df = hdm.get_data(start=self.start_date, end=self.end_date)
+        hdm = YfDataManager(tz=str(self.tz))
+        df = hdm.get_ohlcv_1min(
+            symbol, start_date=self.start_date.date(), end_date=self.end_date.date()
+        )
         return df
 
     def generate_price_stream(self, symbol: str) -> pd.DataFrame:
@@ -427,8 +429,12 @@ class SimulatedTicker(Ticker):
         """
         Fetches historical data for the given symbol.
         """
-        hdm = YfDataManager(symbol=symbol)
-        df = hdm.get_data(start=self.from_, end=self.to)
+        hdm = YfDataManager(tz=str(self.tz))
+        df = hdm.get_ohlcv_1min(
+            symbol,
+            start_date=self.from_.date(),
+            end_date=self.to.date(),
+        )
         return df
 
     def _generate_price_stream(self, symbol: str) -> pd.DataFrame:

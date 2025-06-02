@@ -7,7 +7,10 @@ import pandas as pd
 
 
 def generate_price_stream(
-    ohlc_df, candle_duration="1min", avg_freq_per_minute=10, seed=None
+    ohlc_df,
+    candle_duration="1min",
+    avg_freq_per_minute=10,
+    seed=None,
 ) -> pd.DataFrame:
     """
     Simulate real-time price updates from historical OHLC data.

@@ -4,16 +4,20 @@ from datetime import datetime
 import plotly.graph_objects as go
 from botcoin.data.historical import YfDataManager
 
-hdm = YfDataManager(ticker="AAPL")
+hdm = YfDataManager()
 
 # Create a naive datetime
-start = datetime(year=2025, month=4, day=15, hour=0, minute=0, second=0)
-end = datetime(year=2025, month=4, day=16, hour=0, minute=0, second=0)
+start = datetime(year=2025, month=5, day=30, hour=0, minute=0, second=0)
+end = datetime(year=2025, month=6, day=3, hour=0, minute=0, second=0)
 
 start = hdm.tz.localize(start)
 end = hdm.tz.localize(end)
 
-df = hdm.get_data(start=start, end=end)
+df = hdm.get_ohlcv_1min(
+    "AAPL",
+    start_date=start.date(),
+    end_date=end.date(),
+)
 
 # Plot candlestick chart
 fig = go.Figure(
@@ -40,15 +44,13 @@ fig.update_layout(
 
 # Hide weekends and non-trading hours using range breaks
 fig.update_layout(
-    xaxis=dict(
-        rangeslider_visible=False,
-        rangebreaks=[
-            dict(bounds=["sat", "mon"]),  # Skip weekends
-            dict(
-                bounds=[16, 9.5], pattern="hour"
-            ),  # Skip outside market hours (4 PM - 9:30 AM)
+    xaxis={
+        "rangeslider_visible": False,
+        "rangebreaks": [
+            {"bounds": ["sat", "mon"]},  # Skip weekends
+            {"bounds": [16, 9.5], "pattern": "hour"},  # Skip outside market hours (4 PM - 9:30 AM)
         ],
-    ),
+    },
 )
 
 fig.show()

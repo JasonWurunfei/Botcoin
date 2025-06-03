@@ -5,22 +5,22 @@ from datetime import datetime, date
 import pandas_market_calendars as mcal
 
 
-def is_market_open(exchange: str, date: datetime) -> bool:
+def is_market_open(exchange: str, dt: datetime) -> bool:
     """
     Check if the market is open for the given exchange on a specific date.
 
     Args:
         exchange (str): The market exchange identifier (e.g., 'NYSE', 'NASDAQ').
-        date (datetime): The date to check.
+        dt (datetime): The date to check.
 
     Returns:
         bool: True if the market is open, False otherwise.
     """
     calendar = mcal.get_calendar(exchange)
-    schedule = calendar.schedule(start_date=date.date(), end_date=date.date())
+    schedule = calendar.schedule(start_date=dt.date(), end_date=dt.date())
     return (
         not schedule.empty
-        and schedule.iloc[0]["market_open"] <= date <= schedule.iloc[0]["market_close"]
+        and schedule.iloc[0]["market_open"] <= dt <= schedule.iloc[0]["market_close"]
     )
 
 

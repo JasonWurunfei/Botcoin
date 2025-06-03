@@ -4,14 +4,16 @@ from abc import ABC, abstractmethod
 from enum import Enum
 import os
 from datetime import datetime, timedelta, date
+from typing import override
 
 import pytz
 import pandas as pd
 import yfinance as yf
 from dotenv import load_dotenv
 
-from botcoin.utils.log import logging
 from botcoin.exceptions.data import YfDataRetrievalError
+from botcoin.utils.calendar import is_market_open_today
+from botcoin.utils.log import logging
 
 
 # Load variables from .env file into environment
@@ -48,8 +50,8 @@ class DataProvider(ABC):
     def get_ohlcv(
         self,
         symbol: str,
-        start: date,
-        end: date,
+        start_date: date,
+        end_date: date,
         granularity: TimeGranularity,
     ) -> pd.DataFrame:
         """
@@ -57,8 +59,8 @@ class DataProvider(ABC):
 
         Args:
             symbol (str): The stock ticker symbol.
-            start (date): Start date for the data request.
-            end (date): End date for the data request.
+            start_date (date): Start date for the data request.
+            end_date (date): End date for the data request.
             granularity (TimeGranularity): The time granularity for the data.
 
         Returns:
@@ -69,22 +71,22 @@ class DataProvider(ABC):
     def get_ohlcv_1min(
         self,
         symbol: str,
-        start: datetime,
-        end: datetime,
+        start_date: date,
+        end_date: date,
     ) -> pd.DataFrame:
         """
         Fetches historical data for the specified date range with a default granularity of 1 minute.
 
         Args:
             symbol (str): The stock ticker symbol.
-            start (datetime): Start date and time for the data request.
-            end (datetime): End date and time for the data request.
+            start_date (date): Start date for the data request.
+            end_date (date): End date for the data request.
 
         Returns:
             pd.DataFrame: DataFrame containing the historical data.
             format: {datetime: [open, high, low, close, volume]}
         """
-        return self.get_ohlcv(symbol, start, end, TimeGranularity.ONE_MINUTE)
+        return self.get_ohlcv(symbol, start_date, end_date, TimeGranularity.ONE_MINUTE)
 
 
 class YfDataProvider(DataProvider):
@@ -104,19 +106,19 @@ class YfDataProvider(DataProvider):
     def get_ohlcv(
         self,
         symbol: str,
-        start: date,
-        end: date,
+        start_date: date,
+        end_date: date,
         granularity: TimeGranularity,
     ) -> pd.DataFrame:
         # Fetch data from yfinance
 
         # Ensure the start is before the end
-        if start > end:
+        if start_date > end_date:
             raise ValueError("Start date must be before end date.")
 
         # Set the start and end time to be before and after the market hours
-        start = str(start)
-        end = str(end)
+        start = str(start_date)
+        end = str(end_date)
 
         df = yf.download(
             tickers=symbol,
@@ -393,3 +395,114 @@ class YfDataManager(DataManager):
 
     def __init__(self, data_folder: str = "data", tz: str = "US/Eastern"):
         super().__init__(dp=YfDataProvider(), data_folder=data_folder, tz=tz)
+
+    def _get_1min_data_range(self, symbol: str) -> tuple[date, date]:
+        """
+        Gets the 1 minute data range for the given symbol.
+
+        Args:
+            symbol (str): The stock ticker symbol.
+
+        Returns:
+            tuple[date, date]: A tuple containing the start and end dates of the 1 minute data.
+        """
+        return self.get_current_data_date_range(symbol, TimeGranularity.ONE_MINUTE)
+
+    def _is_local_1min_data_beyond_30_days(self, symbol: str) -> bool:
+        """
+        Checks if the local 1 minute data for the given symbol is beyond 30 days.
+
+        Args:
+            symbol (str): The stock ticker symbol.
+            granularity (TimeGranularity): The time granularity for the data.
+
+        Returns:
+            bool: True if the local data is beyond 30 days, False otherwise.
+        """
+        _, end_date = self._get_1min_data_range(symbol)
+        today = date.today()
+        if today - end_date > timedelta(days=30):
+            return True
+        return False
+
+    @override
+    def get_ohlcv_1min(self, symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
+        """
+        Downloads 1 minute data for the given symbol to local storage.
+
+        Args:
+            symbol (str): The stock ticker symbol.
+            start_date (date): Start date for the data request.
+            end_date (date): End date for the data request.
+
+        Returns:
+            pd.DataFrame: DataFrame containing the 1 minute data.
+        """
+        current_start = end_date - timedelta(days=7)
+        current_end = end_date
+        while current_start > start_date:
+            super().get_ohlcv_1min(
+                symbol=symbol,
+                start_date=current_start,
+                end_date=current_end,
+            )
+            current_end = current_start
+            current_start -= timedelta(days=7)
+
+        if current_start < start_date:
+            super().get_ohlcv_1min(
+                symbol=symbol,
+                start_date=start_date,
+                end_date=end_date,
+            )
+
+        return super().get_ohlcv_1min(symbol, start_date, end_date)
+
+    def get_maximum_1min_data(self, symbol: str, exchange: str = "NYSE") -> pd.DataFrame:
+        """
+        Gets the maximum 1 minute data for the given symbol.
+        Args:
+            symbol (str): The stock ticker symbol.
+            exchange (str): The market exchange identifier (default is "NYSE").
+        Returns:
+            pd.DataFrame: The maximum 1 minute data for the symbol.
+        """
+        today = date.today()
+        is_open = is_market_open_today(exchange)
+        end_date = today + timedelta(days=1) if is_open else today
+
+        if self._is_local_1min_data_beyond_30_days(symbol):
+            # remove the local data if it is beyond 30 days
+            os.remove(self._get_local_data_path(symbol, TimeGranularity.ONE_MINUTE))
+
+            start_date = end_date - timedelta(days=30)
+        else:
+            local_start_date = self._get_1min_data_range(symbol)[0]
+            start_date = (
+                local_start_date
+                if local_start_date < end_date - timedelta(days=30)
+                else end_date - timedelta(days=30)
+            )
+
+        return self.get_ohlcv_1min(symbol, start_date, end_date)
+
+    def get_30d_1min_data(self, symbol: str, exchange: str = "NYSE") -> pd.DataFrame:
+        """
+        Gets the 30 days of 1 minute data for the given symbol.
+
+        Args:
+            symbol (str): The stock ticker symbol.
+            exchange (str): The market exchange identifier (default is "NYSE").
+
+        Returns:
+            pd.DataFrame: DataFrame containing the 30 days of 1 minute data.
+        """
+        today = date.today()
+        is_open = is_market_open_today(exchange)
+        end_date = today + timedelta(days=1) if is_open else today
+        start_date = end_date - timedelta(days=30)
+        return self.get_ohlcv_1min(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+        )

@@ -67,3 +67,4 @@ poetry.lock
 
 # test ground file
 src/test_ground.py
+notebooks/test.ipynb

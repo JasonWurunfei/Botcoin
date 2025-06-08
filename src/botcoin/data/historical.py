@@ -12,7 +12,7 @@ import yfinance as yf
 from dotenv import load_dotenv
 
 from botcoin.exceptions.data import YfDataRetrievalError
-from botcoin.utils.calendar import is_market_open_today
+from botcoin.utils.calendar import is_market_open_today, is_market_open_on_date
 from botcoin.utils.log import logging
 
 
@@ -94,6 +94,8 @@ class YfDataProvider(DataProvider):
     A concrete implementation of DataProvider that uses Yahoo Finance to fetch data.
     """
 
+    logger = logging.getLogger(__qualname__)
+
     def __init__(self, tz: str = "US/Eastern"):
         """
         Initializes the YfDataProvider with a timezone.
@@ -115,6 +117,15 @@ class YfDataProvider(DataProvider):
         # Ensure the start is before the end
         if start_date > end_date:
             raise ValueError("Start date must be before end date.")
+
+        if not self._is_range_contains_market_open(start_date, end_date):
+            self.logger.warning(
+                "The date range does not contain any market open times."
+            )
+            return pd.DataFrame()
+
+        # Adjust the start and end dates to the nearest market open times
+        start_date, end_date = self.shrink_query_range(start_date, end_date)
 
         # Set the start and end time to be before and after the market hours
         start = str(start_date)
@@ -138,6 +149,36 @@ class YfDataProvider(DataProvider):
             )
 
         return df
+
+    def _is_range_contains_market_open(
+        self, start_date: date, end_date: date, exchange: str = "NYSE"
+    ) -> bool:
+        # Check if the range contains any market open times
+        current_date = start_date
+        while current_date < end_date:
+            if is_market_open_on_date(exchange, current_date):
+                return True
+            current_date += timedelta(days=1)
+        return False
+
+    def shrink_query_range(self, start_date: date, end_date: date) -> tuple[date, date]:
+        """
+        Shrinks the query range to the nearest market open times.
+
+        Args:
+            start_date (date): The start date of the query range.
+            end_date (date): The end date of the query range.
+
+        Returns:
+            tuple[date, date]: A tuple containing the shrunk start and end dates.
+        """
+        # Adjust start and end dates to the nearest market open times
+        while not is_market_open_on_date("NYSE", start_date):
+            start_date += timedelta(days=1)
+        while not is_market_open_on_date("NYSE", end_date - timedelta(days=1)):
+            end_date -= timedelta(days=1)
+
+        return start_date, end_date
 
 
 class DataManager:
@@ -531,9 +572,34 @@ class YfDataManager(DataManager):
         today = date.today()
         is_open = is_market_open_today(exchange)
         end_date = today + timedelta(days=1) if is_open else today
-        start_date = end_date - timedelta(days=30)
+        start_date = end_date - timedelta(days=29)
         return self.get_ohlcv_1min(
             symbol=symbol,
             start_date=start_date,
             end_date=end_date,
+        )
+
+    def get_ohlcv_1d(
+        self,
+        symbol: str,
+        start_date: date,
+        end_date: date,
+    ) -> pd.DataFrame:
+        """
+        Fetches historical data for the specified date range with a granularity of 1 day.
+
+        Args:
+            symbol (str): The stock ticker symbol.
+            start_date (date): Start date for the data request.
+            end_date (date): End date for the data request. Not inclusive.
+
+        Returns:
+            pd.DataFrame: DataFrame containing the historical data.
+            format: {datetime: [open, high, low, close, volume]}
+        """
+        return self.get_ohlcv(
+            symbol=symbol,
+            start_date=start_date,
+            end_date=end_date,
+            granularity=TimeGranularity.ONE_DAY,
         )

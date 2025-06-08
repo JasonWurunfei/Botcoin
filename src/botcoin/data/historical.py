@@ -4,7 +4,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 import os
 from datetime import datetime, timedelta, date
-from typing import override
+from typing import override, Optional
 
 import pytz
 import pandas as pd
@@ -129,9 +129,8 @@ class YfDataProvider(DataProvider):
             progress=False,  # Disable progress bar
         )
 
-        if not df.empty:
-            df.index = pd.to_datetime(df.index)
-            df.index = df.index.tz_convert(self.tz)
+        if df is not None and not df.empty:
+            df.index = pd.to_datetime(df.index).tz_convert(self.tz)
         else:
             raise YfDataRetrievalError(
                 f"Failed to retrieve data for {symbol} from {start} to {end} with"
@@ -154,7 +153,12 @@ class DataManager:
 
     logger = logging.getLogger(__qualname__)
 
-    def __init__(self, dp: DataProvider, data_folder: str = None, tz: str = "US/Eastern"):
+    def __init__(
+        self,
+        dp: DataProvider,
+        data_folder: Optional[str] = None,
+        tz: str = "US/Eastern",
+    ):
         self.dp = dp
         self.data_folder = data_folder or os.getenv("DATA_FOLDER", "data")
         self.tz = pytz.timezone(tz)
@@ -232,55 +236,75 @@ class DataManager:
 
         # fetch new data and merge it with the local data
         self.logger.debug("Fetching new data and merging with local data.")
-        res_df = None
-        if start_date + timedelta(days=1) < end_date:  # query for more than a single day
+        res_df = df.copy()
+        if (
+            start_date + timedelta(days=1) < end_date
+        ):  # query for more than a single day
             if start_date >= local_end_date:
                 # If the start date is after the last local data, fetch new data
-                new_df = self.dp.get_ohlcv(symbol, local_end_date, end_date, granularity)
+                new_df = self.dp.get_ohlcv(
+                    symbol, local_end_date, end_date, granularity
+                )
                 res_df = pd.concat([df, new_df])
                 self._save_local_data(res_df, symbol, granularity)
 
             if end_date <= local_start_date:
                 # If the end date is before the first local data, fetch new data
-                new_df = self.dp.get_ohlcv(symbol, start_date, local_start_date, granularity)
+                new_df = self.dp.get_ohlcv(
+                    symbol, start_date, local_start_date, granularity
+                )
                 res_df = pd.concat([new_df, df])
                 self._save_local_data(res_df, symbol, granularity)
 
             if start_date < local_start_date <= end_date <= local_end_date:
                 # If the start is before the local data and end is within the local data
-                new_df = self.dp.get_ohlcv(symbol, start_date, local_start_date, granularity)
+                new_df = self.dp.get_ohlcv(
+                    symbol, start_date, local_start_date, granularity
+                )
                 res_df = pd.concat([new_df, df])
                 self._save_local_data(res_df, symbol, granularity)
 
             if local_start_date <= start_date < local_end_date < end_date:
                 # If the start is after the local data and end is beyond the local data
-                new_df = self.dp.get_ohlcv(symbol, local_end_date, end_date, granularity)
+                new_df = self.dp.get_ohlcv(
+                    symbol, local_end_date, end_date, granularity
+                )
                 res_df = pd.concat([df, new_df])
                 self._save_local_data(res_df, symbol, granularity)
 
             if start_date < local_start_date and end_date > local_end_date:
                 # If the requested range is wider than the local data, fetch new data
-                new_df_left = self.dp.get_ohlcv(symbol, start_date, local_start_date, granularity)
-                new_df_right = self.dp.get_ohlcv(symbol, local_end_date, end_date, granularity)
+                new_df_left = self.dp.get_ohlcv(
+                    symbol, start_date, local_start_date, granularity
+                )
+                new_df_right = self.dp.get_ohlcv(
+                    symbol, local_end_date, end_date, granularity
+                )
                 res_df = pd.concat([new_df_left, df, new_df_right])
                 self._save_local_data(res_df, symbol, granularity)
 
         else:  # query for a single day
             if start_date < local_start_date:
                 # If the start date is before the first local data, fetch new data
-                new_df = self.dp.get_ohlcv(symbol, start_date, local_start_date, granularity)
+                new_df = self.dp.get_ohlcv(
+                    symbol, start_date, local_start_date, granularity
+                )
                 res_df = pd.concat([new_df, df])
                 self._save_local_data(res_df, symbol, granularity)
 
             if start_date >= local_end_date:
                 # If the end date is after the last local data, fetch new data
-                new_df = self.dp.get_ohlcv(symbol, local_end_date, end_date, granularity)
+                new_df = self.dp.get_ohlcv(
+                    symbol, local_end_date, end_date, granularity
+                )
                 res_df = pd.concat([df, new_df])
                 self._save_local_data(res_df, symbol, granularity)
 
         return res_df
 
-    def _get_local_data(self, symbol: str, granularity: TimeGranularity) -> pd.DataFrame:
+    def _get_local_data(
+        self, symbol: str, granularity: TimeGranularity
+    ) -> pd.DataFrame:
         """
         Gets the data from local storage.
 
@@ -294,12 +318,13 @@ class DataManager:
         data_path = self._get_local_data_path(symbol, granularity)
         if os.path.exists(data_path):
             df = pd.read_parquet(data_path)
-            df.index = pd.to_datetime(df.index)
-            df.index = df.index.tz_convert(self.tz)
+            df.index = pd.to_datetime(df.index).tz_convert(self.tz)
             return df
         return pd.DataFrame()
 
-    def _save_local_data(self, df: pd.DataFrame, symbol: str, granularity: TimeGranularity) -> None:
+    def _save_local_data(
+        self, df: pd.DataFrame, symbol: str, granularity: TimeGranularity
+    ) -> None:
         """
         Saves the DataFrame to local storage.
 
@@ -323,7 +348,9 @@ class DataManager:
         Returns:
             str: Local path to the data file.
         """
-        return os.path.join(self.data_folder, f"{symbol}_ohlcv_{granularity.value}.parquet")
+        return os.path.join(
+            self.data_folder, f"{symbol}_ohlcv_{granularity.value}.parquet"
+        )
 
     def _is_in_local(
         self,
@@ -426,7 +453,9 @@ class YfDataManager(DataManager):
         return False
 
     @override
-    def get_ohlcv_1min(self, symbol: str, start_date: date, end_date: date) -> pd.DataFrame:
+    def get_ohlcv_1min(
+        self, symbol: str, start_date: date, end_date: date
+    ) -> pd.DataFrame:
         """
         Downloads 1 minute data for the given symbol to local storage.
 
@@ -458,7 +487,9 @@ class YfDataManager(DataManager):
 
         return super().get_ohlcv_1min(symbol, start_date, end_date)
 
-    def get_maximum_1min_data(self, symbol: str, exchange: str = "NYSE") -> pd.DataFrame:
+    def get_maximum_1min_data(
+        self, symbol: str, exchange: str = "NYSE"
+    ) -> pd.DataFrame:
         """
         Gets the maximum 1 minute data for the given symbol.
         Args:

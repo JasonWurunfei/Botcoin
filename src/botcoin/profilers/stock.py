@@ -27,6 +27,7 @@ class StockProfiler:
         df_1d = self.dm.get_ohlcv_1d(symbol, start_date, end_date)
         return {
             "symbol": symbol,
+            "ohlcv_1min": df_1min,
             "1min_returns": self.compute_oc_returns(df_1min),
             "1d_returns": self.compute_oc_returns(df_1d),
         }

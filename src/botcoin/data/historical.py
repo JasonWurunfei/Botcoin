@@ -92,6 +92,18 @@ class DataProvider(ABC):
         """
         return self.get_ohlcv(symbol, start_date, end_date, TimeGranularity.ONE_MINUTE)
 
+    @abstractmethod
+    def get_ipo_date(self, symbol: str) -> date | None:
+        """
+        Fetches the IPO date for the specified stock symbol.
+
+        Args:
+            symbol (str): The stock ticker symbol.
+
+        Returns:
+            date | None: The IPO date if available, otherwise None.
+        """
+
 
 class YfDataProvider(DataProvider):
     """
@@ -108,6 +120,7 @@ class YfDataProvider(DataProvider):
             tz (str): The timezone to use for the data. Default is "US/Eastern".
         """
         self.tz = pytz.timezone(tz)
+        self.tickers_info = {}
 
     def get_ohlcv(
         self,
@@ -193,6 +206,25 @@ class YfDataProvider(DataProvider):
 
         return start_date, end_date
 
+    def get_ipo_date(self, symbol: str) -> date | None:
+        """
+        Fetches the IPO date for the specified stock symbol.
+
+        Args:
+            symbol (str): The stock ticker symbol.
+
+        Returns:
+            date | None: The IPO date if available, otherwise None.
+        """
+        if symbol not in self.tickers_info:
+            self.tickers_info[symbol] = yf.Ticker(symbol).info
+
+        ticker_info = self.tickers_info[symbol]
+        ipo_date_ms = ticker_info.get("firstTradeDateMilliseconds")
+        if ipo_date_ms:
+            return datetime.fromtimestamp(ipo_date_ms / 1000).date()
+        return None
+
 
 class DataManager:
     """
@@ -267,6 +299,17 @@ class DataManager:
 
         if start_date + timedelta(days=1) > end_date:
             raise ValueError("The date range must be at least 1 day.")
+
+        ipo_date = self.dp.get_ipo_date(symbol)
+        if ipo_date and start_date < ipo_date:
+            self.logger.warning(
+                "The start date %s is before the IPO date %s for %s. "
+                + "Adjusting start date to the IPO date.",
+                start_date,
+                ipo_date,
+                symbol,
+            )
+            start_date = ipo_date
 
         df = self._get_local_data(symbol, granularity)
         if self._is_in_local(df, start_date, end_date):

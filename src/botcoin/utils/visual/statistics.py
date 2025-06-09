@@ -64,3 +64,66 @@ def plot_kde_with_stats(data_series, title="KDE Plot"):
     plt.grid(True)
     plt.tight_layout()
     plt.show()
+
+
+def plot_price_histogram_with_stats(price_series, title="Price Histogram", bins=50):
+    """
+    Plots a histogram and KDE of a price series with mean and ±1 std deviation.
+
+    Parameters:
+    - price_series: pd.Series
+        Series of prices.
+    - title: str
+        Title for the plot.
+    - bins: int
+        Number of histogram bins.
+    """
+    # Calculate stats
+    mean = price_series.mean()
+    std = price_series.std()
+
+    # Plot
+    plt.figure(figsize=(12, 6))
+
+    # Histogram + KDE
+    sns.histplot(
+        price_series,
+        bins=bins,
+        kde=True,
+        color="skyblue",
+        edgecolor="black",
+        stat="density",
+        label="Histogram + KDE",
+    )
+
+    # Vertical lines for mean and ±1 std
+    plt.axvline(
+        mean,
+        color="red",
+        linestyle="--",
+        linewidth=2,
+        label=f"Mean = {mean:.2f}",
+    )
+    plt.axvline(
+        mean - std,
+        color="green",
+        linestyle="--",
+        linewidth=2,
+        label=f"-1 Std = {mean - std:.2f}",
+    )
+    plt.axvline(
+        mean + std,
+        color="green",
+        linestyle="--",
+        linewidth=2,
+        label=f"+1 Std = {mean + std:.2f}",
+    )
+
+    # Final touches
+    plt.title(title)
+    plt.xlabel("Price")
+    plt.ylabel("Density")
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()

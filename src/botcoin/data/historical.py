@@ -12,7 +12,11 @@ import yfinance as yf
 from dotenv import load_dotenv
 
 from botcoin.exceptions.data import YfDataRetrievalError
-from botcoin.utils.calendar import is_market_open_today, is_market_open_on_date
+from botcoin.utils.calendar import (
+    is_market_open_today,
+    is_market_open_on_date,
+    is_market_open_now,
+)
 from botcoin.utils.log import logging
 
 
@@ -127,21 +131,30 @@ class YfDataProvider(DataProvider):
         # Adjust the start and end dates to the nearest market open times
         start_date, end_date = self.shrink_query_range(start_date, end_date)
 
+        if start_date == date.today() and not is_market_open_now("NYSE"):
+            self.logger.warning("The market is not open yet, no data available.")
+            return pd.DataFrame()
+
         # Set the start and end time to be before and after the market hours
         start = str(start_date)
         end = str(end_date)
 
         df = yf.download(
             tickers=symbol,
-            start=start,
-            end=end,
+            start=start_date,
+            end=end_date,
             interval=granularity.value,
             multi_level_index=False,
             progress=False,  # Disable progress bar
         )
 
         if df is not None and not df.empty:
-            df.index = pd.to_datetime(df.index).tz_convert(self.tz)
+            index = pd.to_datetime(df.index)
+            if not index.tz:
+                index = index.tz_localize(self.tz)
+            else:
+                index = index.tz_convert(self.tz)
+            df.index = index
         else:
             raise YfDataRetrievalError(
                 f"Failed to retrieve data for {symbol} from {start} to {end} with"
@@ -359,7 +372,12 @@ class DataManager:
         data_path = self._get_local_data_path(symbol, granularity)
         if os.path.exists(data_path):
             df = pd.read_parquet(data_path)
-            df.index = pd.to_datetime(df.index).tz_convert(self.tz)
+            index = pd.to_datetime(df.index)
+            if not index.tz:
+                index = index.tz_localize(self.tz)
+            else:
+                index = index.tz_convert(self.tz)
+            df.index = index
             return df
         return pd.DataFrame()
 

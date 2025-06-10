@@ -115,7 +115,6 @@ class DataProvider(ABC):
         Returns:
             float | None: The current quote if available, otherwise None.
         """
-        pass
 
 
 class YfDataProvider(DataProvider):

@@ -1,10 +1,11 @@
 """This module contains utility functions for visualizing statistics in the Botcoin application."""
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import seaborn as sns
 
 
-def plot_kde_with_stats(data_series, title="KDE Plot"):
+def plot_kde_with_stats(data_series: pd.Series, title: str = "KDE Plot") -> None:
     """
     Plots KDE curve with mean and ±1 standard deviation lines,
     with rug scatter of individual data points.
@@ -18,11 +19,14 @@ def plot_kde_with_stats(data_series, title="KDE Plot"):
     # Compute statistics
     mean = data_series.mean()
     std = data_series.std()
+    median = data_series.median()
 
     # Convert to percentage
     data_percent = data_series * 100
+    data_percent = data_percent.to_numpy()
     mean_percent = mean * 100
     std_percent = std * 100
+    median_percent = median * 100
 
     # Plot
     plt.figure(figsize=(12, 6))
@@ -37,6 +41,13 @@ def plot_kde_with_stats(data_series, title="KDE Plot"):
         linestyle="--",
         linewidth=2,
         label=f"Mean = {mean_percent:.6f}%",
+    )
+    plt.axvline(
+        median_percent,
+        color="orange",
+        linestyle="--",
+        linewidth=2,
+        label=f"Median = {median_percent:.6f}%",
     )
     plt.axvline(
         mean_percent - std_percent,
@@ -66,13 +77,20 @@ def plot_kde_with_stats(data_series, title="KDE Plot"):
     plt.show()
 
 
-def plot_price_histogram_with_stats(price_series, title="Price Histogram", bins=50):
+def plot_price_histogram_with_stats(
+    price_series: pd.Series,
+    current_price: float,
+    title: str = "Price Histogram",
+    bins: int = 50,
+):
     """
     Plots a histogram and KDE of a price series with mean and ±1 std deviation.
 
     Parameters:
     - price_series: pd.Series
         Series of prices.
+    - current_price: float
+        Current price to highlight on the plot.
     - title: str
         Title for the plot.
     - bins: int
@@ -81,13 +99,14 @@ def plot_price_histogram_with_stats(price_series, title="Price Histogram", bins=
     # Calculate stats
     mean = price_series.mean()
     std = price_series.std()
+    median = price_series.median()
 
     # Plot
     plt.figure(figsize=(12, 6))
 
     # Histogram + KDE
     sns.histplot(
-        price_series,
+        price_series.to_numpy(),
         bins=bins,
         kde=True,
         color="skyblue",
@@ -105,6 +124,13 @@ def plot_price_histogram_with_stats(price_series, title="Price Histogram", bins=
         label=f"Mean = {mean:.2f}",
     )
     plt.axvline(
+        median,
+        color="orange",
+        linestyle="--",
+        linewidth=2,
+        label=f"Median = {median:.2f}",
+    )
+    plt.axvline(
         mean - std,
         color="green",
         linestyle="--",
@@ -117,6 +143,13 @@ def plot_price_histogram_with_stats(price_series, title="Price Histogram", bins=
         linestyle="--",
         linewidth=2,
         label=f"+1 Std = {mean + std:.2f}",
+    )
+    plt.axvline(
+        current_price,
+        color="purple",
+        linestyle="--",
+        linewidth=2,
+        label=f"Current Price = {current_price:.2f}",
     )
 
     # Final touches

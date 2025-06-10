@@ -104,6 +104,19 @@ class DataProvider(ABC):
             date | None: The IPO date if available, otherwise None.
         """
 
+    @abstractmethod
+    def get_quote(self, symbol: str) -> float | None:
+        """
+        Fetches the current quote for the specified stock symbol.
+
+        Args:
+            symbol (str): The stock ticker symbol.
+
+        Returns:
+            float | None: The current quote if available, otherwise None.
+        """
+        pass
+
 
 class YfDataProvider(DataProvider):
     """
@@ -224,6 +237,22 @@ class YfDataProvider(DataProvider):
         if ipo_date_ms:
             return datetime.fromtimestamp(ipo_date_ms / 1000).date()
         return None
+
+    def get_quote(self, symbol: str) -> float | None:
+        """
+        Fetches the current quote for the specified stock symbol.
+
+        Args:
+            symbol (str): The stock ticker symbol.
+
+        Returns:
+            float | None: The current quote if available, otherwise None.
+        """
+        if symbol not in self.tickers_info:
+            self.tickers_info[symbol] = yf.Ticker(symbol).info
+
+        ticker_info = self.tickers_info[symbol]
+        return ticker_info.get("last_price") or ticker_info.get("currentPrice")
 
 
 class DataManager:

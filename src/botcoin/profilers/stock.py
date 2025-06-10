@@ -25,8 +25,11 @@ class StockProfiler:
         df_1min = self.dm.get_30d_1min_data(symbol)
         start_date, end_date = self._get_date_range(timedelta(days=365 * 5))
         df_1d = self.dm.get_ohlcv_1d(symbol, start_date, end_date)
+        quote = self.dm.dp.get_quote(symbol)
         return {
             "symbol": symbol,
+            "ipo_date": self.dm.dp.get_ipo_date(symbol),
+            "quote": quote,
             "ohlcv_1min": df_1min,
             "1min_returns": self.compute_oc_returns(df_1min),
             "1d_returns": self.compute_oc_returns(df_1d),

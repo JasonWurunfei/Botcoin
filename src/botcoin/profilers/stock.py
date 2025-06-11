@@ -3,6 +3,7 @@
 from datetime import date, timedelta
 
 import pandas as pd
+import yfinance as yf
 
 from botcoin.data.historical import YfDataManager
 
@@ -27,6 +28,19 @@ class StockProfiler:
         df_1d = self.dm.get_ohlcv_1d(symbol, start_date, end_date)
         quote = self.dm.dp.get_quote(symbol)
         annual_returns = self.compute_annual_returns(df_1d)
+
+        # Compute the risk-free rate for the same date range
+        risk_free_rate = self.compute_risk_free_rate(start_date, end_date)
+        returns_tz = getattr(annual_returns.index, "tz", None)
+        risk_free_tz = getattr(risk_free_rate.index, "tz", None)
+        if returns_tz is not None:
+            if risk_free_tz is not None:
+                risk_free_rate = risk_free_rate.tz_convert(returns_tz)
+            else:
+                risk_free_rate = risk_free_rate.tz_localize(returns_tz)
+
+        sharpe_ratio = self.compute_sharpe_ratio(annual_returns, risk_free_rate)
+        sortino_ratio = self.compute_sortino_ratio(annual_returns, risk_free_rate)
         return {
             "symbol": symbol,
             "ipo_date": self.dm.dp.get_ipo_date(symbol),
@@ -35,6 +49,8 @@ class StockProfiler:
             "1min_returns": self.compute_oc_returns(df_1min),
             "1d_returns": self.compute_oc_returns(df_1d),
             "annual_return": annual_returns.mean(),
+            "sharpe_ratio": sharpe_ratio,
+            "sortino_ratio": sortino_ratio,
         }
 
     def compute_oc_returns(self, df: pd.DataFrame) -> pd.Series:
@@ -92,3 +108,73 @@ class StockProfiler:
         df = df.dropna(subset=["annual_returns"])
 
         return df["annual_returns"]
+
+    def compute_risk_free_rate(self, start_date: date, end_date: date) -> pd.Series:
+        """
+        Compute the risk-free rate based on the U.S. Treasury yield.
+
+        Args:
+            start_date (date): The start date for the risk-free rate calculation.
+            end_date (date): The end date for the risk-free rate calculation.
+
+        Returns:
+            pd.Series: A Series containing the risk-free rate.
+        """
+
+        irx = yf.download("^IRX", start=start_date, end=end_date)
+
+        if irx is None or irx.empty:
+            raise ValueError("No data found for the risk-free rate.")
+        else:
+            irx["annual_yield"] = irx["Close"] / 100
+            irx["daily_rf_return"] = (1 + irx["annual_yield"]) ** (1 / 252) - 1
+
+        return irx["daily_rf_return"]
+
+    def compute_sharpe_ratio(
+        self, returns: pd.Series, risk_free_rate: pd.Series
+    ) -> float:
+        """
+        Compute the Sharpe ratio for the given returns and risk-free rate.
+
+        Args:
+            returns (pd.Series): The returns of the asset.
+            risk_free_rate (pd.Series): The risk-free rate.
+
+        Returns:
+            float: The Sharpe ratio.
+        """
+        excess_returns = returns - risk_free_rate
+        return excess_returns.mean() / excess_returns.std()
+
+    def compute_semivariance(self, returns: pd.Series) -> float:
+        """
+        Compute the semivariance for the given returns and risk-free rate.
+
+        Args:
+            returns (pd.Series): The returns of the asset.
+
+        Returns:
+            float: The semivariance.
+        """
+        mean = returns.mean()
+        negative_returns = returns[returns < mean]
+        semivariance = (mean - negative_returns) ** 2
+        return semivariance.mean()
+
+    def compute_sortino_ratio(
+        self, returns: pd.Series, risk_free_rate: pd.Series
+    ) -> float:
+        """
+        Compute the Sortino ratio for the given returns and risk-free rate.
+
+        Args:
+            returns (pd.Series): The returns of the asset.
+            risk_free_rate (pd.Series): The risk-free rate.
+
+        Returns:
+            float: The Sortino ratio.
+        """
+        excess_returns = returns - risk_free_rate
+        downside_deviation = self.compute_semivariance(excess_returns)
+        return excess_returns.mean() / downside_deviation**0.5

@@ -41,6 +41,10 @@ class StockProfiler:
 
         sharpe_ratio = self.compute_sharpe_ratio(annual_returns, risk_free_rate)
         sortino_ratio = self.compute_sortino_ratio(annual_returns, risk_free_rate)
+
+        # Compute beta relative to SPY
+        beta = self.compute_beta(symbol)
+
         return {
             "symbol": symbol,
             "ipo_date": self.dm.dp.get_ipo_date(symbol),
@@ -51,7 +55,24 @@ class StockProfiler:
             "annual_return": annual_returns.mean(),
             "sharpe_ratio": sharpe_ratio,
             "sortino_ratio": sortino_ratio,
+            "beta": beta,
         }
+
+    @staticmethod
+    def print_profile(profile: dict) -> None:
+        """
+        Print the stock profile in a readable format.
+
+        Args:
+            profile (dict): The stock profile to print.
+        """
+        print(f"Symbol: {profile['symbol']}")
+        print(f"IPO Date: {profile['ipo_date']}")
+        print(f"Quote: {profile['quote']}")
+        print(f"Annual Return: {profile['annual_return']:.2%}")
+        print(f"Sharpe Ratio: {profile['sharpe_ratio']:.2f}")
+        print(f"Sortino Ratio: {profile['sortino_ratio']:.2f}")
+        print(f"Beta: {profile['beta']:.2f}")
 
     def compute_1d_return_correlation(self, symbol1: str, symbol2: str) -> float:
         """
@@ -204,3 +225,44 @@ class StockProfiler:
         excess_returns = returns - risk_free_rate
         downside_deviation = self.compute_semivariance(excess_returns)
         return excess_returns.mean() / downside_deviation**0.5
+
+    def compute_beta(self, symbol: str, benchmark: str = "SPY") -> float:
+        """
+        Compute the beta of the given stock relative to a benchmark.
+
+        Notes:
+            Beta > 1: More volatile than the market
+
+            Beta < 1: Less volatile than the market
+
+            Beta < 0: Moves inversely to the market
+
+        Args:
+            symbol (str): The stock symbol to compute beta for.
+            benchmark (str): The benchmark symbol to compare against (default is "SPY").
+
+        Returns:
+            float: The beta of the stock.
+        """
+
+        returns = self.compute_oc_returns(
+            self.dm.get_ohlcv_1d(symbol, *self._get_date_range(timedelta(days=365 * 5)))
+        )
+        spy_returns = self.compute_oc_returns(
+            self.dm.get_ohlcv_1d(
+                benchmark, *self._get_date_range(timedelta(days=365 * 5))
+            )
+        )
+
+        # Align on common dates
+        aligned_returns = pd.concat(
+            [returns, spy_returns], axis=1, join="inner"
+        ).dropna()
+
+        symbol = symbol + "_returns"  # to avoid column name conflict
+        aligned_returns.columns = [symbol, benchmark]
+
+        covariance = aligned_returns[symbol].cov(aligned_returns[benchmark])
+        variance = float(aligned_returns[benchmark].var())
+
+        return covariance / variance

@@ -261,7 +261,7 @@ class YfDataProvider(DataProvider):
             self.tickers_info[symbol] = yf.Ticker(symbol).info
 
         ticker_info = self.tickers_info[symbol]
-        return ticker_info.get("last_price") or ticker_info.get("currentPrice")
+        return ticker_info.get("currentPrice") or ticker_info.get("regularMarketPrice")
 
 
 class DataManager:

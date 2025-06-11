@@ -234,6 +234,16 @@ class YfDataProvider(DataProvider):
         ticker_info = self.tickers_info[symbol]
         ipo_date_ms = ticker_info.get("firstTradeDateMilliseconds")
         if ipo_date_ms:
+            if ipo_date_ms < 0:
+                self.logger.warning(
+                    "Negative IPO date milliseconds for %s, returning the earliest available date.",
+                    symbol,
+                )
+                df = yf.Ticker(symbol).history(start="1900-01-01", interval="1d")
+                if not df.empty:
+                    earliest_date = df.index.min()
+                    return earliest_date.date()
+
             return datetime.fromtimestamp(ipo_date_ms / 1000).date()
         return None
 

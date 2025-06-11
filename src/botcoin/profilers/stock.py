@@ -53,6 +53,32 @@ class StockProfiler:
             "sortino_ratio": sortino_ratio,
         }
 
+    def compute_1d_return_correlation(self, symbol1: str, symbol2: str) -> float:
+        """
+        Compute the correlation of 1-day returns between two stocks.
+        Args:
+            symbol1 (str): The first stock symbol.
+            symbol2 (str): The second stock symbol.
+        Returns:
+            float: The correlation coefficient of the 1-day returns.
+        """
+        returns1 = self.compute_oc_returns(
+            self.dm.get_ohlcv_1d(
+                symbol1, *self._get_date_range(timedelta(days=365 * 5))
+            )
+        )
+        returns2 = self.compute_oc_returns(
+            self.dm.get_ohlcv_1d(
+                symbol2, *self._get_date_range(timedelta(days=365 * 5))
+            )
+        )
+
+        # Align on common dates
+        aligned_returns = pd.concat([returns1, returns2], axis=1, join="inner").dropna()
+        aligned_returns.columns = [symbol1, symbol2]
+
+        return aligned_returns[symbol1].corr(aligned_returns[symbol2])
+
     def compute_oc_returns(self, df: pd.DataFrame) -> pd.Series:
         """
         Compute open-close returns for the given DataFrame.

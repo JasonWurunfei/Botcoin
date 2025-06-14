@@ -10,7 +10,12 @@ from botcoin.services import Service
 from botcoin.utils.log import logging
 from botcoin.utils.rabbitmq.event import EventReceiver
 from botcoin.utils.rabbitmq.async_client import AsyncAMQPClient
-from botcoin.data.dataclasses.events import TimeStepEvent, SimStartEvent, SimStopEvent, Event
+from botcoin.data.dataclasses.events import (
+    TimeStepEvent,
+    SimStartEvent,
+    SimStopEvent,
+    Event,
+)
 
 
 class Stepper(Service, EventReceiver):
@@ -48,11 +53,11 @@ class Stepper(Service, EventReceiver):
 
         # Simulation variables
         self.sim_time: float = self.from_
-        self._start_time = None
+        self._start_time: float | None = None
         self._just_slept: bool = False
-        self._before_sleep: float = None
+        self._before_sleep: float | None = None
         self._sleep_adjustment: float = 1
-        self._planned_sleep_duration = None
+        self._planned_sleep_duration: float | None = None
 
         # Simulation Task
         self._simulation_task = None
@@ -62,11 +67,11 @@ class Stepper(Service, EventReceiver):
         Initializes the simulation.
         """
 
-        self.sim_time: float = self.from_
+        self.sim_time = self.from_
         self._start_time = None
-        self._just_slept: bool = False
-        self._before_sleep: float = None
-        self._sleep_adjustment: float = 1
+        self._just_slept = False
+        self._before_sleep = None
+        self._sleep_adjustment = 1
         self._planned_sleep_duration = None
 
     def estimate_real_time(self) -> float:
@@ -121,15 +126,24 @@ class Stepper(Service, EventReceiver):
             # Dynamically adjust the padding time based on the ratio of planned
             # sleep duration to the actual elapsed time since the last sleep.
             if iteration % self._adjust_freq == 0:
-                if self._just_slept:
+                if (
+                    self._just_slept
+                    and self._before_sleep is not None
+                    and self._planned_sleep_duration is not None
+                ):
                     # If we just slept, we need to reset the flag
                     self._just_slept = False
                     # Calculate the time adjustment
                     elapsed_time = time.perf_counter() - self._before_sleep
                     self._sleep_adjustment = self._planned_sleep_duration / elapsed_time
 
+            # Step the simulation time forward
+            curr_time = time.perf_counter()
+            elapsed_sim_time = (curr_time - self._start_time) * self.speed
+            self.sim_time = self.from_ + elapsed_sim_time
+
             # Emit the TimeStep Event
-            self.emit_time_step_event(time.perf_counter())
+            self._emit_time_step_event()
 
             # check if the current time is exceeding the target time
             now = time.perf_counter()
@@ -144,13 +158,13 @@ class Stepper(Service, EventReceiver):
 
             iteration += 1
 
-    def emit_time_step_event(self, curr_time: float) -> None:
+    def _emit_time_step_event(self) -> None:
         """
         Emits the TimeStep Event.
-        :param curr_time: The current time in the simulation.
         """
-        elapsed_sim_time = (curr_time - self._start_time) * self.speed
-        self.sim_time = self.from_ + elapsed_sim_time
+        if self._start_time is None:
+            self.logger.error("Simulation has not been started yet.")
+            return
         event = TimeStepEvent(timestamp=self.sim_time)
         self._async_client.emit_event(event, quite=True)
 

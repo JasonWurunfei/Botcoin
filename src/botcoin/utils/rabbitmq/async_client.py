@@ -5,6 +5,7 @@ import json
 import asyncio
 
 import aio_pika
+from aio_pika.abc import AbstractChannel, AbstractConnection
 
 from botcoin.utils.log import logging
 
@@ -28,8 +29,8 @@ class AsyncAMQPClient:
         """
         Initializes the AMQPClient with the server's hostname and queue name.
         """
-        self.connection = None
-        self.channel = None
+        self.connection: AbstractConnection | None = None
+        self.channel: AbstractChannel | None = None
         self.logger = logging.getLogger("AsyncAMQPClient")
         self.emit_tasks = []
 
@@ -39,10 +40,14 @@ class AsyncAMQPClient:
         callback queue, and basic consumer.
         """
         self.connection = await new_connection()
+        if self.connection.is_closed:
+            raise RuntimeError("Failed to connect to RabbitMQ server.")
         self.channel = await self.connection.channel()
         self.logger.info("Connection with RabbitMQ server established.")
 
-    async def call(self, url: str, server_qname: str, query_params: dict = None) -> dict:
+    async def call(
+        self, url: str, server_qname: str, query_params: dict | None = None
+    ) -> dict:
         """
         Sends a request message to the server with the specified URL and waits
         for the response.
@@ -60,8 +65,12 @@ class AsyncAMQPClient:
         req = {"url": url, "query_params": query_params or {}}
 
         await self._reconnect_if_needed()
+        if self.channel is None or self.channel.is_closed:
+            raise RuntimeError("Channel is not active. Cannot send request.")
 
-        callback_queue = await self.channel.declare_queue("", auto_delete=True, exclusive=True)
+        callback_queue = await self.channel.declare_queue(
+            "", auto_delete=True, exclusive=True
+        )
 
         # Declare server queue in case the queue is not created.
         await self.channel.declare_queue(server_qname, durable=True)
@@ -83,7 +92,7 @@ class AsyncAMQPClient:
             corr_id,
         )
 
-        resp = None
+        resp = {}
 
         async with callback_queue.iterator() as queue_iter:
             async for message in queue_iter:
@@ -100,7 +109,7 @@ class AsyncAMQPClient:
         self,
         event: Event,
         routing_key: str = "",
-        exchange_name: str = None,
+        exchange_name: str | None = None,
         quite: bool = False,
     ) -> None:
         """
@@ -120,8 +129,12 @@ class AsyncAMQPClient:
 
         async def emit() -> None:
             await self._reconnect_if_needed()
+            if self.connection is None or self.channel is None:
+                raise RuntimeError("Connection or channel is not active.")
 
-            exchange = await self.channel.get_exchange(exchange_name or RABBITMQ_EXCHANGE)
+            exchange = await self.channel.get_exchange(
+                exchange_name or RABBITMQ_EXCHANGE
+            )
 
             body = event.serialize()
 
@@ -150,10 +163,14 @@ class AsyncAMQPClient:
         Reconnects to the RabbitMQ server if the connection is closed.
         """
         if self.connection is None or self.connection.is_closed:
-            self.logger.debug("RabbitMQ connection is not active. Reconnecting to RabbitMQ server.")
+            self.logger.debug(
+                "RabbitMQ connection is not active. Reconnecting to RabbitMQ server."
+            )
             await self.connect()
         elif self.channel is None or self.channel.is_closed:
-            self.logger.debug("RabbitMQ channel is not active. Reconnecting to RabbitMQ server.")
+            self.logger.debug(
+                "RabbitMQ channel is not active. Reconnecting to RabbitMQ server."
+            )
             self.channel = await self.connection.channel()
 
     async def close(self) -> None:
@@ -163,7 +180,9 @@ class AsyncAMQPClient:
         # Wait for all emit tasks to finish
         unfinished_tasks = [task for task in self.emit_tasks if not task.done()]
         if len(unfinished_tasks) > 0:
-            self.logger.info("Waiting for %s emit tasks to finish.", len(unfinished_tasks))
+            self.logger.info(
+                "Waiting for %s emit tasks to finish.", len(unfinished_tasks)
+            )
             await asyncio.gather(*unfinished_tasks, return_exceptions=True)
         else:
             self.logger.info("No emit tasks to wait for.")

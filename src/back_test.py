@@ -1,11 +1,8 @@
 """This script is used to start the Botcoin application."""
 
-import os
 import signal
 import asyncio
 from datetime import datetime
-
-from dotenv import load_dotenv
 
 from botcoin.utils.log import logging
 from botcoin.utils.rabbitmq.worker import AsyncEventWorker
@@ -22,12 +19,6 @@ from botcoin.data.dataclasses.events import (
     SimStopEvent,
 )
 
-load_dotenv()
-RABBITMQ_USER = os.getenv("RABBITMQ_USER", "guest")
-RABBITMQ_PASS = os.getenv("RABBITMQ_PASSWORD", "guest")
-RABBITMQ_HOST = os.getenv("RABBITMQ_HOST", "localhost")
-RABBITMQ_PORT = int(os.getenv("RABBITMQ_PORT", "5672"))
-RABBITMQ_EXCHANGE = os.getenv("RABBITMQ_EXCHANGE", "botcoin")
 
 stop_event = asyncio.Event()
 
@@ -52,16 +43,7 @@ async def main():
         loop.add_signal_handler(sig, shutdown)
 
     # Initialize the worker
-    worker_queue = asyncio.Queue()
-    worker = AsyncEventWorker(
-        worker_queue=worker_queue,
-        rabbitmq_user=RABBITMQ_USER,
-        rabbitmq_pass=RABBITMQ_PASS,
-        rabbitmq_host=RABBITMQ_HOST,
-        rabbitmq_qname="botcoin_worker",
-        rabbitmq_exchange=RABBITMQ_EXCHANGE,
-        rabbitmq_port=RABBITMQ_PORT,
-    )
+    worker = AsyncEventWorker(qname="botcoin_worker")
 
     # Set up simulation time frame
     start = datetime(year=2025, month=5, day=13, hour=9, minute=31, second=0)

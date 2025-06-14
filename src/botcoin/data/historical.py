@@ -538,7 +538,7 @@ class DataManager:
 
         return start_date, end_date
 
-    def get_current_data_date_range(
+    def get_local_data_date_range(
         self, symbol: str, granularity: TimeGranularity
     ) -> tuple[date, date]:
         """
@@ -573,7 +573,7 @@ class YfDataManager(DataManager):
         Returns:
             tuple[date, date]: A tuple containing the start and end dates of the 1 minute data.
         """
-        return self.get_current_data_date_range(symbol, TimeGranularity.ONE_MINUTE)
+        return self.get_local_data_date_range(symbol, TimeGranularity.ONE_MINUTE)
 
     def _is_local_1min_data_beyond_30_days(self, symbol: str) -> bool:
         """

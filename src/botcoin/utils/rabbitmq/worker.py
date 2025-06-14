@@ -10,6 +10,7 @@ from typing import Callable, Coroutine, Any, Type
 import aio_pika
 
 from botcoin.utils.log import logging
+from botcoin.utils.rabbitmq.conn import new_connection, RABBITMQ_EXCHANGE
 from botcoin.data.dataclasses.events import Event
 
 
@@ -21,30 +22,25 @@ class AsyncEventWorker:
 
     logger = logging.getLogger(__qualname__)
 
-    def __init__(
-        self,
-        worker_queue: asyncio.Queue,
-        rabbitmq_user: str,
-        rabbitmq_pass: str,
-        rabbitmq_host: str,
-        rabbitmq_qname: str,
-        rabbitmq_exchange: str,
-        rabbitmq_port: int = 5672,
-    ) -> None:
-        self.rabbitmq_user = rabbitmq_user
-        self.rabbitmq_pass = rabbitmq_pass
-        self.rabbitmq_host = rabbitmq_host
-        self.rabbitmq_port = rabbitmq_port
-        self.rabbitmq_qname = rabbitmq_qname
-        self.rabbitmq_exchange = rabbitmq_exchange
+    def __init__(self, qname: str) -> None:
         self.coroutines = []
         self.tasks = []
         self.events = {}
-        self.worker_queue = worker_queue or asyncio.Queue()
+        self.worker_queue = asyncio.Queue()
         self.status = "stopped"
         self._connection = None
         self._channel = None
         self._daemon_task = None
+        self.qname = qname
+
+    def get_queue(self) -> asyncio.Queue:
+        """
+        Get the worker queue.
+
+        Returns:
+            asyncio.Queue: The worker queue.
+        """
+        return self.worker_queue
 
     def add_coroutine(
         self,
@@ -60,7 +56,9 @@ class AsyncEventWorker:
         """
 
         # Get class name and method name
-        class_name = coro.__self__.__class__.__name__ if hasattr(coro, "__self__") else None
+        class_name = (
+            coro.__self__.__class__.__name__ if hasattr(coro, "__self__") else None
+        )
         method_name = coro.__name__
 
         async def wrapper():
@@ -76,7 +74,9 @@ class AsyncEventWorker:
             except asyncio.CancelledError:
 
                 if class_name:
-                    self.logger.info("Coroutine %s.%s was cancelled.", class_name, method_name)
+                    self.logger.info(
+                        "Coroutine %s.%s was cancelled.", class_name, method_name
+                    )
                 else:
                     self.logger.info("Coroutine %s was cancelled.", method_name)
             except Exception as e:
@@ -156,26 +156,16 @@ class AsyncEventWorker:
         """
 
         # Connect to RabbitMQ server
-        self._connection = await aio_pika.connect_robust(
-            host=self.rabbitmq_host,
-            port=self.rabbitmq_port,
-            login=self.rabbitmq_user,
-            password=self.rabbitmq_pass,
-        )
-        self.logger.info(
-            "Connected to RabbitMQ server at %s:%d",
-            self.rabbitmq_host,
-            self.rabbitmq_port,
-        )
+        self._connection = await new_connection()
 
         # Create a channel and declare the exchange and queue
         self._channel = await self._connection.channel()
 
         exchange = await self._channel.declare_exchange(
-            self.rabbitmq_exchange, aio_pika.ExchangeType.FANOUT, durable=True
+            RABBITMQ_EXCHANGE, aio_pika.ExchangeType.FANOUT, durable=True
         )
 
-        queue = await self._channel.declare_queue(self.rabbitmq_qname, durable=True)
+        queue = await self._channel.declare_queue(self.qname, durable=True)
         await queue.bind(exchange)
 
         # Listen for messages in the queue

@@ -62,7 +62,7 @@ class Stepper(Service, EventReceiver):
         # Simulation Task
         self._simulation_task = None
 
-    def sim_init(self) -> None:
+    def _sim_init(self) -> None:
         """
         Initializes the simulation.
         """
@@ -100,7 +100,7 @@ class Stepper(Service, EventReceiver):
         await self._async_client.close()
         self.logger.info("%s stopped.", self.__class__.__name__)
 
-    async def start_simulation(self) -> None:
+    async def _simulate(self) -> None:
         """
         Starts the simulation loop.
         """
@@ -174,8 +174,8 @@ class Stepper(Service, EventReceiver):
         :param event: The event to handle.
         """
         if isinstance(event, SimStartEvent):
-            self.sim_init()
-            self._simulation_task = asyncio.create_task(self.start_simulation())
+            self._sim_init()
+            self._simulation_task = asyncio.create_task(self._simulate())
         elif isinstance(event, SimStopEvent):
             if self._simulation_task:
                 self._simulation_task.cancel()

@@ -80,7 +80,9 @@ class FinnhubTicker(Ticker):
             # Subscribe to the symbols if any are provided
             if self.symbols:
                 for symbol in self.symbols:
-                    await self.ws.send(json.dumps({"type": "subscribe", "symbol": symbol}))
+                    await self.ws.send(
+                        json.dumps({"type": "subscribe", "symbol": symbol})
+                    )
 
             async for message in self.ws:
                 json_message = json.loads(message)
@@ -401,9 +403,19 @@ class SimulatedTicker(Ticker):
         self.from_ = from_
         self.to = to
 
-        # loaclize the start and end dates
-        self.from_ = self.tz.localize(self.from_)
-        self.to = self.tz.localize(self.to)
+        # localize the start and end dates if they are naive
+        if self.from_.tzinfo is None:
+            self.from_ = self.tz.localize(self.from_)
+        else:
+            # if the from_ date is not naive, convert it to the specified timezone
+            if self.from_.tzinfo != self.tz:
+                self.from_ = self.from_.astimezone(self.tz)
+
+        if self.to.tzinfo is None:
+            self.to = self.tz.localize(self.to)
+        else:
+            if self.to.tzinfo != self.tz:
+                self.to = self.to.astimezone(self.tz)
 
     async def start(self) -> None:
         """
@@ -442,11 +454,7 @@ class SimulatedTicker(Ticker):
         Generates a price stream from historical data for the given symbol.
         """
         df = self._get_historical_data(symbol)
-        prices = generate_price_stream(
-            df,
-            candle_duration="1min",
-            avg_freq_per_minute=12,
-        )
+        prices = generate_price_stream(df)
         return prices
 
     def get_price_generator(self, symbol: str, timestamp: float):

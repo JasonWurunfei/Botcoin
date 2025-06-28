@@ -100,6 +100,31 @@ class StockProfiler:
 
         return aligned_returns[symbol1].corr(aligned_returns[symbol2])
 
+    def compute_1d_return_correlation_matrix(self, symbols: list[str]) -> pd.DataFrame:
+        """
+        Compute the correlation matrix of 1-day returns for a list of stocks.
+
+        Args:
+            symbols (list[str]): A list of stock symbols.
+
+        Returns:
+            DataFrame: A DataFrame containing the correlation matrix.
+        """
+        # Initialize an empty DataFrame
+        correlation_matrix = pd.DataFrame(index=symbols, columns=symbols)
+
+        # Fill the correlation matrix
+        for i in symbols:
+            for j in symbols:
+                if i == j:
+                    correlation_matrix.loc[i, j] = 1.0  # Perfect correlation with self
+                elif pd.isna(correlation_matrix.loc[i, j]):
+                    corr = self.compute_1d_return_correlation(i, j)
+                    correlation_matrix.loc[i, j] = corr
+                    correlation_matrix.loc[j, i] = corr  # Symmetric matrix
+
+        return correlation_matrix
+
     def compute_oc_returns(self, df: pd.DataFrame) -> pd.Series:
         """
         Compute open-close returns for the given DataFrame.

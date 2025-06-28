@@ -2,16 +2,19 @@
 This module manages a RabbitMQ async worker process for the botcoin framework.
 """
 
-import json
 import asyncio
+import json
+import signal
 import traceback
 from typing import Callable, Coroutine, Any, Type
 
 import aio_pika
 
+from botcoin.services import Service
 from botcoin.utils.log import logging
 from botcoin.utils.rabbitmq.conn import new_connection, RABBITMQ_EXCHANGE
 from botcoin.data.dataclasses.events import Event
+from botcoin.utils.rabbitmq.event import EventReceiver
 
 
 class AsyncEventWorker:
@@ -32,6 +35,8 @@ class AsyncEventWorker:
         self._channel = None
         self._daemon_task = None
         self.qname = qname
+        self.event_receiver: list[EventReceiver] = []
+        self.services = []
 
     def get_queue(self) -> asyncio.Queue:
         """
@@ -86,6 +91,58 @@ class AsyncEventWorker:
 
         self.coroutines.append(wrapper)
 
+    def add_service(self, service: Service) -> None:
+        """
+        Register a service to the worker process.
+
+        Args:
+            service: The service to be registered.
+        """
+        if not isinstance(service, Service):
+            raise TypeError("Service must be an instance of Service")
+
+        if service not in self.services:
+            self.services.append(service)
+            self.logger.info("Service registered: %s", service.__class__.__name__)
+            self.add_coroutine(service.start)
+
+    def add_event_receiver(self, receiver: EventReceiver) -> None:
+        """
+        Register an event receiver to the worker process.
+
+        Args:
+            receiver: The event receiver to be registered.
+        """
+        if not isinstance(receiver, EventReceiver):
+            raise TypeError("Receiver must be an instance of EventReceiver")
+
+        if receiver not in self.event_receiver:
+            self.event_receiver.append(receiver)
+            self.logger.info(
+                "Event receiver registered: %s", receiver.__class__.__name__
+            )
+
+    def _regitser_events(self) -> None:
+        """
+        Register all events from the event receivers to the worker process.
+        """
+        events = set()
+        for receiver in self.event_receiver:
+            for event in receiver.subscribedEvents:
+                if event not in events:
+                    self.subscribe_event(event)
+                    events.add(event)
+
+    def notify_event_receivers(self, event: Event) -> None:
+        """
+        Notify all registered event receivers about an event.
+
+        Args:
+            event: The event to be notified.
+        """
+        for receiver in self.event_receiver:
+            asyncio.create_task(receiver.on_event(event))
+
     async def _start_coroutines(self) -> None:
         """
         Start all coroutines in the worker.
@@ -134,6 +191,16 @@ class AsyncEventWorker:
         if event_class.cls_event_type not in self.events:
             self.events[event_class.cls_event_type] = event_class
             self.logger.info("Event registered: %s", event_class.cls_event_type)
+
+    def subscribe_events(self, events: list[Type[Event]]) -> None:
+        """
+        Subscribe multiple events to monitor in the worker process.
+
+        Args:
+            events: A list of event classes to be registered.
+        """
+        for event in events:
+            self.subscribe_event(event)
 
     def remove_event(self, event_type: str) -> None:
         """
@@ -224,6 +291,10 @@ class AsyncEventWorker:
         # Stop coroutines
         await self._stop_coroutines()
 
+        # Stop all registered services
+        for service in self.services:
+            await service.stop()
+
         # Cancel daemon task if running
         if self._daemon_task:
             self._daemon_task.cancel()
@@ -242,3 +313,39 @@ class AsyncEventWorker:
             self.logger.info("RabbitMQ connection closed.")
 
         self.logger.info("Worker stopped cleanly.")
+
+
+async def run_worker(worker: AsyncEventWorker) -> None:
+    """
+    Run the worker in an asyncio event loop.
+    """
+    stop_event = asyncio.Event()
+
+    def shutdown():
+        """
+        Shutdown handler to stop the worker gracefully.
+        """
+        stop_event.set()
+
+    # Register shutdown signal handlers
+    loop = asyncio.get_running_loop()
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        loop.add_signal_handler(sig, shutdown)
+
+    # Start the worker
+    worker_queue = worker.get_queue()
+    worker_task = asyncio.create_task(worker.start())
+
+    try:
+        # Main event loop
+        while not stop_event.is_set():
+            try:
+                event = await asyncio.wait_for(worker_queue.get(), timeout=1.0)
+                worker.notify_event_receivers(event)
+            except asyncio.TimeoutError:
+                continue  # Check for stop_event periodically
+    finally:
+        # Cleanup
+        await worker.stop()
+        if worker_task:
+            await worker_task

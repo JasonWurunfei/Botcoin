@@ -23,6 +23,11 @@ class Stepper(Service, EventReceiver):
 
     logger = logging.getLogger(__qualname__)
 
+    subscribedEvents = {
+        SimStartEvent,
+        SimStopEvent,
+    }
+
     def __init__(
         self,
         from_: datetime,

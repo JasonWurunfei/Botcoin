@@ -32,6 +32,11 @@ class Ticker(Service, EventReceiver, ABC):
     Abstract base class to manage and fetch real-time price data for a list of stock symbols.
     """
 
+    subscribedEvents = {
+        RequestTickEvent,
+        RequestStopTickEvent,
+    }
+
     @abstractmethod
     async def subscribe(self, symbol: str) -> None:
         """Subscribes to a new ticker symbol."""
@@ -385,6 +390,10 @@ class SimulatedTicker(Ticker):
     """
 
     logger = logging.getLogger(__qualname__)
+
+    subscribedEvents = Ticker.subscribedEvents | {
+        TimeStepEvent,
+    }
 
     def __init__(self, from_: datetime, to: datetime, tz: str = "US/Eastern"):
         """

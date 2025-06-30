@@ -2,10 +2,14 @@
 
 from datetime import date, timedelta
 
+import numpy as np
 import pandas as pd
+from scipy import signal
+from scipy.fft import fft, fftfreq
 import yfinance as yf
 
 from botcoin.data.historical import YfDataManager
+from botcoin.utils.visual.statistics import plot_fourier_results
 
 
 class StockProfiler:
@@ -28,6 +32,8 @@ class StockProfiler:
         df_1d = self.dm.get_ohlcv_1d(symbol, start_date, end_date)
         quote = self.dm.dp.get_quote(symbol)
         annual_returns = self.compute_annual_returns(df_1d)
+        returns_1d = self.compute_oc_returns(df_1d)
+        log_returns_1d = np.log(returns_1d + 1)
 
         # Compute the risk-free rate for the same date range
         risk_free_rate = self.compute_risk_free_rate(start_date, end_date)
@@ -50,8 +56,10 @@ class StockProfiler:
             "ipo_date": self.dm.dp.get_ipo_date(symbol),
             "quote": quote,
             "ohlcv_1min": df_1min,
+            "df_1d": df_1d,
+            "1d_returns": returns_1d,
+            "log_returns_1d": log_returns_1d,
             "1min_returns": self.compute_oc_returns(df_1min),
-            "1d_returns": self.compute_oc_returns(df_1d),
             "annual_return": annual_returns.mean(),
             "sharpe_ratio": sharpe_ratio,
             "sortino_ratio": sortino_ratio,
@@ -291,3 +299,39 @@ class StockProfiler:
         variance = float(aligned_returns[benchmark].var())
 
         return covariance / variance
+
+    def fourier_analysis(self, price_series: pd.Series) -> dict:
+        """
+        Perform Fourier analysis on the given price series.
+
+        Args:
+            price_series (pd.Series): The price series to analyze.
+
+        Returns:
+            dict: A dictionary containing the periods, magnitudes, and frequencies.
+        """
+        # Remove trend (detrend)
+        detrended = signal.detrend(price_series)  # type: ignore
+
+        # Apply window function to reduce spectral leakage
+        windowed = detrended * np.hanning(len(detrended))
+
+        # Compute FFT
+        fft_values = fft(windowed)
+        freqs = fftfreq(len(windowed), d=1)  # Daily frequency
+
+        # Get positive frequencies only
+        positive_freq_idx = freqs > 0
+        freqs_positive = freqs[positive_freq_idx]
+        fft_magnitude = np.abs(fft_values[positive_freq_idx])  # type: ignore
+
+        # Convert frequency to periods (in days)
+        periods = 1 / freqs_positive  # type: ignore
+
+        results = {
+            "periods": periods,
+            "magnitudes": fft_magnitude,
+            "frequencies": freqs_positive,
+        }
+
+        return results

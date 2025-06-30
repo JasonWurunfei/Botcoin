@@ -81,7 +81,7 @@ def plot_price_histogram_with_stats(
     price_series: pd.Series,
     current_price: float,
     title: str = "Price Histogram",
-    bins: int = 50,
+    bins: int = 200,
 ):
     """
     Plots a histogram and KDE of a price series with mean and ±1 std deviation.
@@ -158,5 +158,69 @@ def plot_price_histogram_with_stats(
     plt.ylabel("Density")
     plt.legend()
     plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_fourier_results(
+    symbol: str,
+    periods: pd.Series,
+    magnitudes: pd.Series,
+    dominant_periods: pd.Series,
+    dominant_magnitudes: pd.Series,
+):
+    """
+    Plots the results of Fourier analysis.
+
+    Parameters:
+    - periods: pd.Series
+        Series of periods (in days).
+    - magnitudes: pd.Series
+        Series of magnitudes corresponding to the periods.
+    - dominant_periods: pd.Series
+        Series of dominant periods to highlight.
+    - dominant_magnitudes: pd.Series
+        Series of magnitudes corresponding to the dominant periods.
+    - title: str
+        Title for the plot.
+    """
+    _, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 10))
+
+    # Plot frequency spectrum
+    ax1.plot(periods, magnitudes, alpha=0.7)
+    ax1.set_xlim(1, 365 * 2)  # Focus on 1 day to 2 years
+    ax1.set_xlabel("Period (Days)")
+    ax1.set_ylabel("Magnitude")
+    ax1.set_title(f"{symbol} - Frequency Spectrum")
+    ax1.grid(True, alpha=0.3)
+    ax1.set_xscale("log")
+
+    # Highlight dominant periods
+    for i, (period, mag) in enumerate(
+        zip(dominant_periods[:5], dominant_magnitudes[:5])
+    ):
+        if 1 <= period <= 365 * 2:
+            ax1.axvline(x=period, color="red", linestyle="--", alpha=0.7)
+            ax1.text(
+                period,
+                mag,
+                f"{period:.0f}d",
+                rotation=90,
+                verticalalignment="bottom",
+                fontsize=8,
+            )
+
+    # Plot dominant periods as bar chart
+    periods_to_show = dominant_periods[dominant_periods <= 365 * 2]
+    magnitudes_to_show = dominant_magnitudes[dominant_periods <= 365 * 2]
+
+    ax2.bar(range(len(periods_to_show)), magnitudes_to_show, alpha=0.7)
+    ax2.set_xlabel("Rank")
+    ax2.set_ylabel("Magnitude")
+    ax2.set_title("Top Seasonal Periods")
+    ax2.set_xticks(range(len(periods_to_show)))
+    ax2.set_xticklabels([f"{p:.0f}d" for p in periods_to_show], rotation=45)
+    ax2.grid(True, alpha=0.3)
+
     plt.tight_layout()
     plt.show()

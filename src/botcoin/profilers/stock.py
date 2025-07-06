@@ -9,7 +9,6 @@ from scipy.fft import fft, fftfreq
 import yfinance as yf
 
 from botcoin.data.historical import YfDataManager
-from botcoin.utils.visual.statistics import plot_fourier_results
 
 
 class StockProfiler:
@@ -18,17 +17,18 @@ class StockProfiler:
     def __init__(self):
         self.dm = YfDataManager()
 
-    def profile(self, symbol: str) -> dict:
+    def profile(self, symbol: str, years: int = 5) -> dict:
         """
         Profile the given stock.
 
         Args:
             symbol (str): The stock symbol to profile.
+            years (int): The number of years of data to retrieve for profiling.
         Returns:
             dict: A dictionary containing the stock profile.
         """
         df_1min = self.dm.get_30d_1min_data(symbol)
-        start_date, end_date = self._get_date_range(timedelta(days=365 * 5))
+        start_date, end_date = self._get_date_range(timedelta(days=365 * years))
         df_1d = self.dm.get_ohlcv_1d(symbol, start_date, end_date)
         quote = self.dm.dp.get_quote(symbol)
         annual_returns = self.compute_annual_returns(df_1d)
@@ -60,11 +60,61 @@ class StockProfiler:
             "1d_returns": returns_1d,
             "log_returns_1d": log_returns_1d,
             "1min_returns": self.compute_oc_returns(df_1min),
-            "annual_return": annual_returns.mean(),
+            "annual_returns": annual_returns,
+            "exp_annual_return": annual_returns.mean(),
+            "var_annual_return": annual_returns.var(),
             "sharpe_ratio": sharpe_ratio,
             "sortino_ratio": sortino_ratio,
             "beta": beta,
         }
+
+    def get_quote(self, symbol: str) -> float:
+        """
+        Get the stock quote for the given stock symbol.
+
+        Args:
+            symbol (str): The stock symbol to get the quote for.
+
+        Returns:
+            float: The current stock quote.
+        """
+        quote = self.dm.dp.get_quote(symbol)
+        if quote is None:
+            raise ValueError(f"No quote found for symbol: {symbol}")
+        return quote
+
+    def get_annual_returns(self, symbol: str) -> pd.Series:
+        """
+        Get the annual returns for the given stock symbol.
+
+        Args:
+            symbol (str): The stock symbol to get annual returns for.
+
+        Returns:
+            pd.Series: A Series containing the annual returns.
+        """
+        df_1d = self.dm.get_ohlcv_1d(
+            symbol,
+            *self._get_date_range(
+                timedelta(days=365 * 6)
+            ),  # 6 years of data to compute 5 years of annual returns
+        )
+        return self.compute_annual_returns(df_1d)
+
+    def get_ohlcv_1d(self, symbol: str, years: int) -> pd.DataFrame:
+        """
+        Get the OHLCV data for the given stock symbol.
+
+        Args:
+            symbol (str): The stock symbol to get OHLCV data for.
+            years (int): The number of years of data to retrieve.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the OHLCV data.
+        """
+        return self.dm.get_ohlcv_1d(
+            symbol, *self._get_date_range(timedelta(days=365 * years))
+        )
 
     @staticmethod
     def print_profile(profile: dict) -> None:
@@ -77,7 +127,7 @@ class StockProfiler:
         print(f"Symbol: {profile['symbol']}")
         print(f"IPO Date: {profile['ipo_date']}")
         print(f"Quote: {profile['quote']}")
-        print(f"Annual Return: {profile['annual_return']:.2%}")
+        print(f"Expected Annual Return: {profile['exp_annual_return']:.2%}")
         print(f"Sharpe Ratio: {profile['sharpe_ratio']:.2f}")
         print(f"Sortino Ratio: {profile['sortino_ratio']:.2f}")
         print(f"Beta: {profile['beta']:.2f}")
@@ -145,6 +195,34 @@ class StockProfiler:
         """
         df["oc_returns"] = (df["Close"] - df["Open"]) / df["Open"]
         return df["oc_returns"]
+
+    def compute_close_returns(self, df: pd.DataFrame) -> pd.Series:
+        """
+        Compute close-close returns for the given DataFrame.
+
+        Args:
+            df (DataFrame): The DataFrame containing OHLCV data.
+
+        Returns:
+            Series: A Series with the computed close-close returns.
+        """
+        df["close_returns"] = df["Close"].pct_change()
+        return df["close_returns"].dropna()
+
+    def compute_max_drawdown(self, df: pd.DataFrame) -> float:
+        """
+        Compute the maximum drawdown for the given DataFrame.
+
+        Args:
+            df (DataFrame): The DataFrame containing OHLCV data.
+
+        Returns:
+            float: The maximum drawdown as a percentage.
+        """
+        df["peak"] = df["Close"].cummax()
+        df["drawdown"] = (df["Close"] - df["peak"]) / df["peak"]
+        max_drawdown = df["drawdown"].min()
+        return max_drawdown
 
     def _get_date_range(self, time_delta: timedelta) -> tuple[date, date]:
         """
@@ -335,3 +413,71 @@ class StockProfiler:
         }
 
         return results
+
+    def monthly_seasonality(
+        self, df_1d: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Analyze monthly seasonality in the given price series.
+
+        Args:
+            df_1d (pd.DataFrame): The DataFrame containing daily price data.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the average monthly returns.
+        """
+        returns = self.compute_close_returns(df_1d)
+
+        # Add month column
+        data = returns.to_frame(name="returns")
+        data["month"] = data.index.month
+        data["year"] = data.index.year
+
+        # Group by month and year, cumulatively sum returns
+        monthly_returns = (
+            data.groupby(["year", "month"])["returns"]
+            .apply(lambda x: (1 + x).prod() - 1)  # Cumulative product of returns
+            .reset_index()
+        )
+
+        monthly_stats = monthly_returns.groupby("month")["returns"].agg(
+            ["mean", "std", "count"]
+        )
+
+        monthly_stats["sharpe"] = monthly_stats["mean"] / monthly_stats["std"]
+
+        monthly_stats["mean"] = monthly_stats["mean"].dropna()
+        monthly_stats["std"] = monthly_stats["std"].dropna()
+        monthly_stats["count"] = monthly_stats["count"].dropna()
+
+        return monthly_stats, monthly_returns
+
+    def weekly_seasonality(
+        self, df_1d: pd.DataFrame
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        """
+        Analyze weekly seasonality in the given price series.
+
+        Args:
+            df_1d (pd.DataFrame): The DataFrame containing daily price data.
+
+        Returns:
+            pd.DataFrame: A DataFrame containing the average weekly returns.
+        """
+        returns = self.compute_close_returns(df_1d)
+
+        # Add weekday column
+        weekly_data = returns.to_frame(name="returns")
+        weekly_data["weekday"] = weekly_data.index.day_name()
+
+        # Calculate daily statistics
+        weekday_stats = weekly_data.groupby("weekday")["returns"].agg(
+            ["mean", "std", "count"]
+        )
+        weekday_stats["sharpe"] = weekday_stats["mean"] / weekday_stats["std"]
+
+        # Reorder by weekday
+        weekday_order = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+        weekday_stats = weekday_stats.reindex(weekday_order)
+
+        return weekday_stats, weekly_data

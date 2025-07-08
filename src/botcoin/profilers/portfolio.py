@@ -253,3 +253,28 @@ class PortfolioProfiler:
         spy_portfolio_values = (1 + spy_daily_returns).cumprod() * self.portfolio_value
 
         return spy_portfolio_values
+
+    def compute_t_stats(self, weights: np.ndarray) -> dict:
+        """
+        Compute the T-stats for the portfolio.
+
+        Args:
+            weights (np.ndarray): Portfolio weights.
+
+        Returns:
+            dict: A dictionary containing the T-stats.
+        """
+        if len(weights) != len(self.symbols):
+            raise ValueError("Weights length must match number of symbols.")
+
+        # Compute daily portfolio returns
+        daily_returns = self.df_1d @ weights
+
+        # Calculate mean and standard deviation of daily returns
+        mean_return = daily_returns.mean()
+        std = daily_returns.std()
+
+        # Calculate T-statistic
+        t_stat = mean_return / (std / np.sqrt(len(daily_returns)))
+
+        return {"mean_return": mean_return, "std": std, "t_stat": t_stat}

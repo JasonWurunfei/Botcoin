@@ -1,7 +1,5 @@
 """This module provides functions to profile portfolio statistics, including the efficient frontier and the Capital Market Line (CML)."""
 
-from datetime import date
-
 import pandas as pd
 import numpy as np
 from scipy.optimize import minimize
@@ -50,6 +48,8 @@ class PortfolioProfiler:
             keys=self.symbols,
         )
         self.df_1d = self.df_1d.dropna()
+        self.start_date = self.df_1d.index.min().date()
+        self.end_date = self.df_1d.index.max().date()
 
         self.returns_df = pd.concat(all_annual_returns, axis=1)
         self.returns_df.columns = self.symbols
@@ -229,9 +229,7 @@ class PortfolioProfiler:
 
         return portfolio_values
 
-    def compute_spy_portfolio_value(
-        self, start_date: date, end_date: date
-    ) -> pd.Series:
+    def compute_spy_portfolio_value(self) -> pd.Series:
         """
         Compute the daily portfolio value over time using SPY as a benchmark.
 
@@ -241,7 +239,7 @@ class PortfolioProfiler:
 
         # Fetch SPY data
         spy_df = self._profiler.dm.get_ohlcv_1d(
-            "SPY", start_date=start_date, end_date=end_date
+            "SPY", start_date=self.start_date, end_date=self.end_date
         )
         spy_df["close_returns"] = spy_df["Close"].pct_change()
         spy_df = spy_df.dropna(subset=["close_returns"])
@@ -253,6 +251,26 @@ class PortfolioProfiler:
         spy_portfolio_values = (1 + spy_daily_returns).cumprod() * self.portfolio_value
 
         return spy_portfolio_values
+
+    def compute_spy_annual_returns_and_risk(self) -> tuple[float, float]:
+        """
+        Compute the annual returns and risk of SPY over a specified date range.
+        Args:
+            start_date (date): Start date for the data.
+            end_date (date): End date for the data.
+        Returns:
+            tuple: A tuple containing the annual return and risk of SPY.
+        """
+        spy_df = self._profiler.dm.get_ohlcv_1d(
+            "SPY", start_date=self.start_date, end_date=self.end_date
+        )
+        spy_df["close_returns"] = spy_df["Close"].pct_change()
+        spy_df = spy_df.dropna(subset=["close_returns"])
+        spy_annual_returns = self.compute_annual_returns(spy_df)
+        spy_annual_return = spy_annual_returns.mean()
+        spy_annual_risk = spy_annual_returns.std()
+
+        return spy_annual_return, spy_annual_risk
 
     def compute_t_stats(self, weights: np.ndarray) -> dict:
         """

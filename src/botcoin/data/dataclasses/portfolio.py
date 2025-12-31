@@ -3,6 +3,7 @@ Docstring for botcoin.data.dataclasses.portfolio
 """
 
 from dataclasses import dataclass, field
+from typing import Optional
 
 
 @dataclass(kw_only=True, slots=True, order=True)
@@ -24,6 +25,7 @@ class Stock:
 
     symbol: str
     currency: str
+    market_price: Optional[float] = None
     entries: list[Entry] = field(default_factory=list)
 
     @property
@@ -50,6 +52,16 @@ class Stock:
         Returns the total invested amount in the stock.
         """
         return sum(entry.open_price * entry.quantity for entry in self.entries)
+
+    @property
+    def total_market_value(self) -> float:
+        """
+        Returns the total market value of the stock based on the market price.
+        """
+        if self.market_price is None:
+            raise ValueError(f"Market price is not set for stock {self.symbol}")
+
+        return self.market_price * self.quantity
 
     def add_entry(self, symbol: str, open_price: float, quantity: int) -> None:
         """
@@ -90,7 +102,6 @@ class Portfolio:
 
     stocks: dict[str, Stock] = field(default_factory=dict)
     cash: float = 0.0
-    reserved_cash: float = 0.0
 
     @property
     def invested_value(self) -> float:
@@ -98,6 +109,18 @@ class Portfolio:
         Returns the total invested value in stocks.
         """
         return sum(stock.total_invested for stock in self.stocks.values())
+
+    @property
+    def total_value(self) -> float:
+        """
+        Returns the total value of the portfolio (cash + market value of stocks).
+        """
+        total_stocks_value = sum(
+            stock.total_market_value
+            for stock in self.stocks.values()
+            if stock.market_price is not None
+        )
+        return self.cash + total_stocks_value
 
     def buy_stock(self, symbol: str, quantity: int, open_price: float):
         """

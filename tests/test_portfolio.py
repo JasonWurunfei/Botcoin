@@ -35,6 +35,17 @@ class TestStock(unittest.TestCase):
         self.stock.add_entry(symbol="AAPL", open_price=110.0, quantity=3)
         self.assertEqual(self.stock.total_invested, 100.0 * 2 + 110.0 * 3)
 
+    def test_total_market_value(self):
+        self.stock.add_entry(symbol="AAPL", open_price=100.0, quantity=2)
+        self.stock.add_entry(symbol="AAPL", open_price=110.0, quantity=3)
+        self.stock.market_price = 120.0
+        self.assertEqual(self.stock.total_market_value, 120.0 * 5)
+
+    def test_total_market_value_no_market_price_raises(self):
+        self.stock.add_entry(symbol="AAPL", open_price=100.0, quantity=2)
+        with self.assertRaises(ValueError):
+            _ = self.stock.total_market_value
+
     def test_add_entry_symbol_mismatch_raises(self):
         with self.assertRaises(ValueError):
             self.stock.add_entry(symbol="MSFT", open_price=100.0, quantity=1)
@@ -74,7 +85,7 @@ class TestStock(unittest.TestCase):
 
 class TestPortfolio(unittest.TestCase):
     def setUp(self):
-        self.p = Portfolio(cash=1000.0, reserved_cash=50.0)
+        self.p = Portfolio(cash=1000.0)
 
     def test_invested_value_empty(self):
         self.assertEqual(self.p.invested_value, 0.0)
@@ -87,6 +98,23 @@ class TestPortfolio(unittest.TestCase):
         self.p.stocks = {"AAPL": s1, "MSFT": s2}
 
         self.assertEqual(self.p.invested_value, 350.0)
+
+    def test_total_value_empty(self):
+        self.assertEqual(self.p.total_value, 1000.0)
+
+    def test_total_value_with_stocks(self):
+        s1 = Stock(symbol="AAPL", currency="USD")
+        s1.add_entry(symbol="AAPL", open_price=100.0, quantity=2)  # invested 200
+        s1.market_price = 120.0  # market value 240
+        s2 = Stock(symbol="MSFT", currency="USD")
+        s2.add_entry(symbol="MSFT", open_price=50.0, quantity=3)  # invested 150
+        s2.market_price = 60.0  # market value 180
+        self.p.stocks = {"AAPL": s1, "MSFT": s2}
+
+        expected_total = (
+            1000.0 + 120.0 * 2 + 60.0 * 3
+        )  # cash + AAPL market + MSFT market
+        self.assertEqual(self.p.total_value, expected_total)
 
     def test_buy_stock_quantity_must_be_positive(self):
         with self.assertRaises(ValueError):

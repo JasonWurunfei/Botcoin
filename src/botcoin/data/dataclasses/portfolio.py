@@ -3,9 +3,6 @@ Docstring for botcoin.data.dataclasses.portfolio
 """
 
 from dataclasses import dataclass, field
-from datetime import date, timedelta
-
-import yfinance as yf
 
 
 @dataclass(kw_only=True, slots=True, order=True)
@@ -84,18 +81,6 @@ class Stock:
                 remaining_quantity = 0
         self.entries = new_entries
 
-    def market_value(self, d: date) -> float:
-        """
-        Returns the current market value of the stock.
-        If date is provided, returns the market value at that date.
-        """
-        ticker = yf.Ticker(self.symbol)
-        hist = ticker.history(start=d, end=d + timedelta(days=1))
-        if hist.empty:
-            raise ValueError(f"No data available for {self.symbol} on {d}")
-        closing_price = hist["Close"].iloc[0]
-        return round(closing_price * self.quantity, 2)
-
 
 @dataclass(kw_only=True, slots=True, order=True)
 class Portfolio:
@@ -113,16 +98,6 @@ class Portfolio:
         Returns the total invested value in stocks.
         """
         return sum(stock.total_invested for stock in self.stocks.values())
-
-    def total_value(self, d: date) -> float:
-        """
-        Returns the total value of the portfolio, including cash and stocks.
-        If date is provided, calculates stock values at that date.
-        """
-        total_value = self.cash + self.reserved_cash
-        for s in self.stocks.values():
-            total_value += s.market_value(d)
-        return total_value
 
     def buy_stock(self, symbol: str, quantity: int, open_price: float):
         """

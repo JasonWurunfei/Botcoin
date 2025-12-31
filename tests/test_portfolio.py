@@ -1,8 +1,4 @@
 import unittest
-from datetime import date, timedelta
-from unittest.mock import MagicMock, patch
-
-import pandas as pd
 
 from botcoin.data.dataclasses.portfolio import Stock, Portfolio
 
@@ -75,42 +71,6 @@ class TestStock(unittest.TestCase):
         self.assertEqual(len(self.stock.entries), 1)
         self.assertEqual(self.stock.entries[0].quantity, 3)
 
-    @patch("botcoin.data.dataclasses.portfolio.yf.Ticker")
-    def test_market_value_success(self, mock_ticker_cls):
-        # Setup: quantity = 4, closing price = 12.5 => market value = 50.0
-        self.stock.add_entry(symbol="AAPL", open_price=100.0, quantity=4)
-
-        mock_ticker = MagicMock()
-        mock_ticker_cls.return_value = mock_ticker
-
-        hist_df = pd.DataFrame({"Close": [12.5]})
-        mock_ticker.history.return_value = hist_df
-
-        d = date(2025, 1, 2)
-        mv = self.stock.market_value(d)
-
-        self.assertEqual(mv, 50.0)
-        mock_ticker_cls.assert_called_once_with("AAPL")
-        mock_ticker.history.assert_called_once()  # details checked below if you want
-
-        # If you want to assert exact args:
-        _, kwargs = mock_ticker.history.call_args
-        self.assertEqual(kwargs["start"], d)
-        self.assertEqual(kwargs["end"], date(2025, 1, 3))
-
-    @patch("botcoin.data.dataclasses.portfolio.yf.Ticker")
-    def test_market_value_no_data_raises(self, mock_ticker_cls):
-        self.stock.add_entry(symbol="AAPL", open_price=100.0, quantity=1)
-
-        mock_ticker = MagicMock()
-        mock_ticker_cls.return_value = mock_ticker
-
-        empty_df = pd.DataFrame()
-        mock_ticker.history.return_value = empty_df
-
-        with self.assertRaises(ValueError):
-            self.stock.market_value(date(2025, 1, 2))
-
 
 class TestPortfolio(unittest.TestCase):
     def setUp(self):
@@ -127,70 +87,6 @@ class TestPortfolio(unittest.TestCase):
         self.p.stocks = {"AAPL": s1, "MSFT": s2}
 
         self.assertEqual(self.p.invested_value, 350.0)
-
-    def test_total_value_cash_only(self):
-        d = date(2025, 1, 2)
-        self.assertEqual(self.p.total_value(d), 1050.0)
-
-    @patch("botcoin.data.dataclasses.portfolio.yf.Ticker")
-    def test_total_value_with_yfinance_mock(self, mock_ticker_cls):
-        mock_ticker = MagicMock()
-        mock_ticker_cls.return_value = mock_ticker
-
-        mock_ticker.history.return_value = pd.DataFrame({"Close": [10.0]})
-
-        self.p.buy_stock("AAPL", quantity=10, open_price=5.0)
-
-        total = self.p.total_value(date(2025, 1, 2))
-
-        # cash left = 1000 - 50 = 950, stock value = 100
-        self.assertEqual(total, 950.0 + 50.0 + 100.0)
-
-    @patch("botcoin.data.dataclasses.portfolio.yf.Ticker")
-    def test_total_value_full_chain_two_stocks(self, mock_ticker_cls):
-        # --- Arrange: make yfinance return different Close prices per symbol ---
-        def ticker_factory(symbol: str):
-            ticker = MagicMock(name=f"Ticker({symbol})")
-
-            def history(*, start, end):
-                # Ensure Portfolio->Stock passes correct date window (d to d+1)
-                self.assertEqual(end, start + timedelta(days=1))
-
-                if symbol == "AAPL":
-                    return pd.DataFrame({"Close": [10.0]})  # AAPL close
-                if symbol == "MSFT":
-                    return pd.DataFrame({"Close": [20.0]})  # MSFT close
-
-                return pd.DataFrame()  # unknown symbol => empty => should raise if used
-
-            ticker.history.side_effect = history
-            return ticker
-
-        mock_ticker_cls.side_effect = ticker_factory
-
-        # Portfolio with cash + reserved cash
-        p = Portfolio(cash=1000.0, reserved_cash=50.0)
-
-        # Buy 2 symbols (this uses real Portfolio.buy_stock and real Stock.add_entry)
-        p.buy_stock("AAPL", quantity=3, open_price=5.0)  # costs 15, cash -> 985
-        p.buy_stock("MSFT", quantity=2, open_price=10.0)  # costs 20, cash -> 965
-
-        d = date(2025, 1, 2)
-
-        # --- Act ---
-        total = p.total_value(d)
-
-        # --- Assert ---
-        # cash + reserved = 965 + 50 = 1015
-        # AAPL value = 3 * 10 = 30
-        # MSFT value = 2 * 20 = 40
-        # total = 1015 + 30 + 40 = 1085
-        self.assertEqual(total, 1085.0)
-
-        # yfinance called once per symbol during valuation
-        self.assertEqual(mock_ticker_cls.call_count, 2)
-        mock_ticker_cls.assert_any_call("AAPL")
-        mock_ticker_cls.assert_any_call("MSFT")
 
     def test_buy_stock_quantity_must_be_positive(self):
         with self.assertRaises(ValueError):
